@@ -1,7 +1,6 @@
 import os
 import cupy
 import cv2 as cv
-import numpy as np
 from datasets.utils import characters_to_ints
 from datasets.data_processing import image_array_processing
 from datasets.utils import START_TOKEN, PAD_TOKEN, END_TOKEN
@@ -24,9 +23,9 @@ def word_to_token_array(text, max_length=19):
     return cupy.array(word_as_char_tokens, dtype=cupy.uint8)
 
 def iam_dataset(folder, txt_file, image_size):
-    # Extract important data in .txt file 
     # a01-000u-06-05 ok 159 1910 1839 458 63 NP Exchange - Example of each line data
-    extracted_data = []
+    image_arrays = []
+    word_token_arrays = []
     dataset_text_line = open(os.path.join(folder, txt_file)).read().splitlines()
     for line in dataset_text_line:
         if line[0] == '#':
@@ -40,15 +39,27 @@ def iam_dataset(folder, txt_file, image_size):
             if image_array is None: continue
             if len(word_written_in_image) == 1: continue
             word_as_character_tokens = word_to_token_array(word_written_in_image)
-            extracted_data.append((image_array, word_as_character_tokens))
-    return extracted_data
+            image_arrays.append(cupy.array(image_array))
+            word_token_arrays.append(cupy.array(word_as_character_tokens))
+    return image_arrays, word_token_arrays
 
-def iam_dataloader(folder, text_file, batch_size, image_size):
-    extracted_data = iam_dataset(folder, text_file, image_size)
-    num_samples = len(extracted_data)
-    num_batches = num_samples // batch_size
-    batch_array_data = []
-    for i in range(num_batches):
-        start_idx = i * batch_size
-        end_idx = start_idx + batch_size
-        batched = extracted_data[start_idx:end_idx]
+def iam_dataloader(folder, text_file, image_size, batch_size=128):
+    image_arrays, word_token_arrays = iam_dataset(folder, text_file, image_size)
+    num_samples = len(image_arrays)
+    i = 0
+    start_index = 0
+    end_index = batch_size
+    batched_image_arrays = []
+    batched_word_token_arrays = []
+    while True:
+        if num_samples == 0: break
+        batch_image_array = cupy.stack(image_arrays[start_index:end_index], axis=0)
+        batch_word_token_array = cupy.stack(word_token_arrays[start_index:end_index], axis=0)
+        batched_image_arrays.append(batch_image_array)
+        batched_word_token_arrays.append(batch_word_token_array)
+        i += 1 
+        start_index = i * batch_size
+        end_index = start_index + batch_size
+        num_samples -= end_index
+        if num_samples < 0: num_samples = 0
+    return batched_image_arrays, batched_word_token_arrays
