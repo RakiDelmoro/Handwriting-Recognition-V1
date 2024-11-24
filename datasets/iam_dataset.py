@@ -20,13 +20,12 @@ def image_to_array(folder, image_path, size):
 def word_to_token_array(text, max_length=19):
     number_of_pad_tokens = max_length - len(text)
     word_as_char_tokens = characters_to_ints(START_TOKEN) + characters_to_ints(text) + characters_to_ints(END_TOKEN)
-    if number_of_pad_tokens != 0:
-        word_as_char_tokens.extend(characters_to_ints(PAD_TOKEN) * number_of_pad_tokens)
+    if number_of_pad_tokens != 0: word_as_char_tokens.extend(characters_to_ints(PAD_TOKEN) * number_of_pad_tokens)
     return cupy.array(word_as_char_tokens, dtype=cupy.uint8)
 
-def extract_data(folder, txt_file, image_size):
+def iam_dataset(folder, txt_file, image_size):
     # Extract important data in .txt file 
-    # a01-000u-00-00 ok 154 408 768 27 51 AT A - Example of line data in .txt file
+    # a01-000u-06-05 ok 159 1910 1839 458 63 NP Exchange - Example of each line data
     extracted_data = []
     dataset_text_line = open(os.path.join(folder, txt_file)).read().splitlines()
     for line in dataset_text_line:
@@ -44,7 +43,12 @@ def extract_data(folder, txt_file, image_size):
             extracted_data.append((image_array, word_as_character_tokens))
     return extracted_data
 
-def iam_dataset(folder, text_file, batch_size, image_size):
-    extracted_data = extract_data(folder, text_file, image_size)
-    print(extracted_data)
-    #TODO: create a function that takes a extracted data list and return a batched 
+def iam_dataloader(folder, text_file, batch_size, image_size):
+    extracted_data = iam_dataset(folder, text_file, image_size)
+    num_samples = len(extracted_data)
+    num_batches = num_samples // batch_size
+    batch_array_data = []
+    for i in range(num_batches):
+        start_idx = i * batch_size
+        end_idx = start_idx + batch_size
+        batched = extracted_data[start_idx:end_idx]
