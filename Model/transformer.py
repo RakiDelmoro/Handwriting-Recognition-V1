@@ -3,16 +3,17 @@ from utils import axons_and_dentrites_initialization, softmax
 
 def transformer_model(network_feature_size, num_attn_heads, attention_feature_size):
 
-    def image_patches_embeddings(image_patches, patched_feature_size, parameters=None):
+    def image_patches_embeddings(image_patches, parameters=None):
         batch_size = image_patches.shape[0]
         num_patches = image_patches.shape[1]
         input_feature = image_patches.shape[0]
-        output_feature = patched_feature_size
+        output_feature = network_feature_size
         if parameters is None: axons, dentrites = axons_and_dentrites_initialization(output_feature, input_feature)
         else: axons, dentrites = parameters
         # This array is to provide information of image patches position. Unlike RNN which process data sequentially. Transformer work on all tokens/patches simultaneuously.
         trainable_positional_embedding = cupy.zeros([batch_size, num_patches, output_feature])
         image_projection = cupy.dot(image_patches, axons) + dentrites
+        # batch size | patches | image patched feature size
         return image_projection + trainable_positional_embedding
 
     def self_attention(image_patches, parameters=None):
