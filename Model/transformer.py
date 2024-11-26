@@ -15,7 +15,17 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
         image_projection = cupy.dot(image_patches, axons) + dentrites
         # batch size | patches | image patched feature size
         return image_projection + trainable_positional_embedding
-
+    
+    def word_tokens_embeddings(word_tokens, padding_token=padding_token, parameters=None):
+        if parameters is None: character_tokens_axons = axons_and_dentrites_initialization(number_of_classes, network_feature_size)[0]
+        else: character_tokens_axons = parameters
+        # Assign no connection for padding index
+        character_tokens_axons[padding_token] = cupy.zeros(network_feature_size)
+        # batch | tokens length | network feature size
+        tokens_embeddings = character_tokens_axons[word_tokens]
+        trainable_positional_embedding = cupy.zeros(tokens_embeddings.shape)
+        return tokens_embeddings + trainable_positional_embedding
+    
     def self_attention(input_tokens, parameters=None):
         batch_size = input_tokens.shape[0]
         num_tokens = input_tokens.shape[1]
