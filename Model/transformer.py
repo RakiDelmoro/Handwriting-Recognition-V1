@@ -1,7 +1,7 @@
 import cupy
 from Model.utils import axons_and_dentrites_initialization, softmax
 
-def transformer_model(network_feature_size, num_attn_heads, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
+def transformer_model(network_feature_size, num_attn_heads, num_layers, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
 
     def image_patches_embeddings(image_patches, parameters=None):
         batch_size = image_patches.shape[0]
@@ -73,11 +73,20 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
         layer_2_activations = cupy.dot(layer_1_activations, layer_2_axons) + layer_2_dentrites
         return layer_2_activations
 
-    def test_runner(image_patches, word_tokens):
+    def layer(tokens_embeddings):
+        self_attention_output = multi_head_attention(tokens_embeddings)
+        self_attention_output = self_attention_output + tokens_embeddings # First residual connection
+        mlp_output = multi_layer_perceptron(self_attention_output)
+        mlp_output = mlp_output + self_attention_output # Second residual connection
+        return mlp_output
+
+    def attention_layers_forward(image_patches, word_tokens):
         image_embeddings = image_patches_embeddings(image_patches)
         character_embeddings = word_tokens_embeddings(word_tokens)
-        tokens_embeddings = combine_patches_and_tokens(image_embeddings, character_embeddings)
-        self_attention_output = multi_head_attention(tokens_embeddings)
-        mlp_output = multi_layer_perceptron(self_attention_output)
+        layer_input = combine_patches_and_tokens(image_embeddings, character_embeddings)
+        for _ in range(num_layers):
+            layer_input = layer(layer_input)
 
-    return test_runner
+        return layer_input
+
+    return attention_layers_forward
