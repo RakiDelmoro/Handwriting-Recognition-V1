@@ -14,8 +14,8 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         trainable_positional_embedding = cupy.zeros([batch_size, num_patches, output_feature])
         image_projection = cupy.dot(image_patches, axons) + dentrites
         # batch size | patches | image patched feature size
-        return image_projection + trainable_positional_embedding
-    
+        return (image_projection + trainable_positional_embedding), (axons, dentrites)
+
     def word_tokens_embeddings(word_tokens, padding_token=padding_token, parameters=None):
         if parameters is None: character_tokens_axons = axons_and_dentrites_initialization(number_of_classes, network_feature_size)[0]
         else: character_tokens_axons = parameters
@@ -24,7 +24,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         # batch | tokens length | network feature size
         tokens_embeddings = character_tokens_axons[word_tokens]
         trainable_positional_embedding = cupy.zeros(tokens_embeddings.shape)
-        return tokens_embeddings + trainable_positional_embedding
+        return (tokens_embeddings + trainable_positional_embedding), character_tokens_axons
     
     def combine_patches_and_tokens(image_patches, word_tokens):
         # batch | image patches length + word tokens length | network feature size
@@ -58,7 +58,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
         # batch | tokens | network feature size
         attention_output = cupy.dot(attention_output, axons_for_attention) + dentrites_for_attention
-        return attention_output
+        return attention_output, [[axons_for_query, dentrites_for_query], [axons_for_key, dentrites_for_key], [axons_for_value, dentrites_for_value], [axons_for_attention, dentrites_for_attention]]
     
     def multi_layer_perceptron(attention_output, parameters=None):
         input_feature_size = attention_output.shape[-1]
@@ -71,22 +71,22 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
             layer_2_axons, layer_2_dentrites = parameters[1]
         layer_1_activations = cupy.dot(attention_output, layer_1_axons) + layer_1_dentrites
         layer_2_activations = cupy.dot(layer_1_activations, layer_2_axons) + layer_2_dentrites
-        return layer_2_activations
+        return layer_2_activations, [[layer_1_axons, layer_1_dentrites], [layer_2_axons, layer_2_dentrites]]
 
-    def layer(tokens_embeddings):
-        self_attention_output = multi_head_attention(tokens_embeddings)
+    def layer(tokens_embeddings, parameters=None):
+        self_attention_output, self_attention_params = multi_head_attention(tokens_embeddings)
         self_attention_output = self_attention_output + tokens_embeddings # First residual connection
-        mlp_output = multi_layer_perceptron(self_attention_output)
+        mlp_output, mlp_params = multi_layer_perceptron(self_attention_output)
         mlp_output = mlp_output + self_attention_output # Second residual connection
-        return mlp_output
+        return mlp_output, [self_attention_params, mlp_params]
 
-    def attention_layers_forward(image_patches, word_tokens):
-        image_embeddings = image_patches_embeddings(image_patches)
-        character_embeddings = word_tokens_embeddings(word_tokens)
+    def layers_forward(image_patches, word_tokens):
+        image_embeddings, params = image_patches_embeddings(image_patches)
+        character_embeddings, params = word_tokens_embeddings(word_tokens)
         layer_input = combine_patches_and_tokens(image_embeddings, character_embeddings)
         for _ in range(num_layers):
-            layer_input = layer(layer_input)
+            layer_input, params = layer(layer_input)
 
-        return layer_input
+        return layer_input, params
 
-    return attention_layers_forward
+    return layers_forward
