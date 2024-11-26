@@ -26,7 +26,11 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
         trainable_positional_embedding = cupy.zeros(tokens_embeddings.shape)
         return tokens_embeddings + trainable_positional_embedding
     
-    def self_attention(input_tokens, parameters=None):
+    def combine_patches_and_tokens(image_patches, word_tokens):
+        # batch | image patches length + word tokens length | network feature size
+        return cupy.concatenate([image_patches, word_tokens], axis=1)
+    
+    def self_attention(input_tokens, mask=None, parameters=None):
         batch_size = input_tokens.shape[0]
         num_tokens = input_tokens.shape[1]
         total_attn_feature_size = num_attn_heads * attention_feature_size
