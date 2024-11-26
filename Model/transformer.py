@@ -58,6 +58,7 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
 
     def test_runner(image_patches, word_tokens):
         image_embeddings = image_patches_embeddings(image_patches)
-        attention_output = self_attention(image_patches)
+        character_embeddings = word_tokens_embeddings(word_tokens)
+        
 
     return test_runner
