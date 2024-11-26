@@ -1,7 +1,7 @@
 import cupy
 from Model.utils import axons_and_dentrites_initialization, softmax
 
-def transformer_model(network_feature_size, num_attn_heads, attention_feature_size, number_of_classes, padding_token):
+def transformer_model(network_feature_size, num_attn_heads, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
 
     def image_patches_embeddings(image_patches, parameters=None):
         batch_size = image_patches.shape[0]
@@ -30,7 +30,7 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
         # batch | image patches length + word tokens length | network feature size
         return cupy.concatenate([image_patches, word_tokens], axis=1)
     
-    def self_attention(input_tokens, mask=None, parameters=None):
+    def multi_head_attention(input_tokens, mask=None, parameters=None):
         batch_size = input_tokens.shape[0]
         num_tokens = input_tokens.shape[1]
         total_attn_feature_size = num_attn_heads * attention_feature_size
@@ -59,10 +59,25 @@ def transformer_model(network_feature_size, num_attn_heads, attention_feature_si
         # batch | tokens | network feature size
         attention_output = cupy.dot(attention_output, axons_for_attention) + dentrites_for_attention
         return attention_output
+    
+    def multi_layer_perceptron(attention_output, parameters=None):
+        input_feature_size = attention_output.shape[-1]
+        output_feature_size = input_feature_size*mlp_ratio
+        if parameters is None:
+            layer_1_axons, layer_1_dentrites = axons_and_dentrites_initialization(input_feature_size, output_feature_size)
+            layer_2_axons, layer_2_dentrites = axons_and_dentrites_initialization(output_feature_size, input_feature_size)
+        else:
+            layer_1_axons, layer_1_dentrites = parameters[0]
+            layer_2_axons, layer_2_dentrites = parameters[1]
+        layer_1_activations = cupy.dot(attention_output, layer_1_axons) + layer_1_dentrites
+        layer_2_activations = cupy.dot(layer_1_activations, layer_2_axons) + layer_2_dentrites
+        return layer_2_activations
 
     def test_runner(image_patches, word_tokens):
         image_embeddings = image_patches_embeddings(image_patches)
         character_embeddings = word_tokens_embeddings(word_tokens)
-        
+        tokens_embeddings = combine_patches_and_tokens(image_embeddings, character_embeddings)
+        self_attention_output = multi_head_attention(tokens_embeddings)
+        mlp_output = multi_layer_perceptron(self_attention_output)
 
     return test_runner
