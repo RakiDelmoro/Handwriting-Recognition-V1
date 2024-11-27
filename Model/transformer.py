@@ -129,5 +129,6 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         mlp_output, mlp_activations, mlp_parameters = multi_layer_perceptron(encoder_output)
         model_prediction, output_layer_parameters = model_output(mlp_output)
         return model_prediction
-
+    # TODO: Implement backpropagation, Update Model parameters
+    # TODO: Find a better approach on storing model activations and model parameters
     return model_forward
