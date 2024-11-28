@@ -3,6 +3,7 @@ import cupy
 import torch
 from cupy import asnumpy
 from torch.nn.functional import ctc_loss
+from Model.backpropagation import backpropagation
 from Model.utils import axons_and_dentrites_initialization, softmax, unpadded_length_tokens, log_softmax
 
 def transformer_model(network_feature_size, num_attn_heads, num_layers, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
@@ -51,7 +52,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         # batch | tokens | network feature size
         attention_output = cupy.matmul(attention_output, output_attention_axons) + output_attnetion_dentrites
         attention_activations = [asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value)]
-        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
+        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_value), asnumpy(attentions_probabilities), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
         return attention_output, attention_activations, attention_parameters
 
     def encoder_mlp(attention_output, parameters=None):
@@ -148,22 +149,6 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         model_loss.backward()
         last_model_layer_gradients = cupy.array(model_prediction.grad)
         return cupy.array(model_loss.item()), last_model_layer_gradients
-    
-    def calculate_mlp_stress(layer_stress_propagated, mlp_parameters):
-        layer_stress = layer_stress_propagated
-        mlp_layers_stress = []
-        for layer_idx in range(len(mlp_parameters)):
-            layer_axons, _ = mlp_parameters(-(layer_idx+1))
-            layer_stress = cupy.matmul(layer_stress, cupy.array(layer_axons))
-            mlp_layers_stress.append(cupy.asnumpy(layer_stress))
-        return mlp_layers_stress
-
-    def backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, encoder_parameters, image_embeddings_parameters):
-        output_layer_axons, _ = output_layer_parameters
-        # transpose last layer stress - num_patches | batch | feature size -> batch | num_patches | feature size
-        layer_stress_propagated = cupy.matmul(last_layer_stress.transpose(1, 0, 2), cupy.array(output_layer_axons.transpose()))
-        mlp_layers_stress = calculate_mlp_stress(layer_stress_propagated, mlp_parameters)
-        #TODO: propagted the stress to the preceding layers
 
     def training_model(training_loader):
         for batched_image_patch, expected_word in training_loader:
