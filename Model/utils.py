@@ -1,10 +1,11 @@
 import math
 import cupy
 import torch
-from datasets.utils import characters_to_ints, PAD_TOKEN
+import numpy as np
+from datasets.utils import char_to_index, PAD_TOKEN
 
 def unpadded_length_tokens(word_tokens):
-    length = (word_tokens != characters_to_ints(PAD_TOKEN)).sum(1)
+    length = (word_tokens != char_to_index[PAD_TOKEN]).sum(1)
     return length
 
 def leaky_relu(input_data, return_derivative=False):
@@ -42,14 +43,27 @@ def axons_and_dentrites_initialization(input_feature, output_feature):
     torch.nn.init.uniform_(bias, -bound, bound)
     return cupy.array(weights), cupy.array(bias)
 
-def softmax(input_data):
+def softmax(input_data, layer_stress=None, return_derivative=False):
     # Subtract max value for numerical stability
     shifted_data = input_data - cupy.max(input_data, axis=-1, keepdims=True)
     # Calculate exp
     exp_data = cupy.exp(shifted_data)
     # Sum along axis=1 and keep dimensions for broadcasting
     sum_exp_data = cupy.sum(exp_data, axis=-1, keepdims=True)
-    return exp_data / sum_exp_data
+    if return_derivative:
+        dot_product = np.dot(input_data, layer_stress)
+        return input_data * (layer_stress - dot_product)
+    else:
+        return exp_data / sum_exp_data
+
+def log_softmax(input_data):
+    # Subtract max value for numerical stability
+    shifted_data = input_data - cupy.max(input_data, axis=-1, keepdims=True)
+    # Calculate exp
+    exp_data = cupy.exp(shifted_data)
+    # Sum along axis=1 and keep dimensions for broadcasting
+    log_sum_exp = cupy.log(cupy.sum(exp_data, axis=-1, keepdims=True))
+    return shifted_data - log_sum_exp
 
 def generate_square_mask(size):
     mask = (cupy.triu(cupy.ones((size, size))) == 1)
