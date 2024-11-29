@@ -1,6 +1,7 @@
 import numpy as np
 import cupy
 import torch
+import math
 from cupy import asnumpy
 from torch.nn.functional import ctc_loss
 from Model.backpropagation import backpropagation
@@ -37,22 +38,23 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
             axons_for_key, dentrites_for_key = parameters[1]
             axons_for_value, dentrites_for_value = parameters[2]
             output_attention_axons, output_attnetion_dentrites = parameters[3]
-        # batch | attention heads | tokens | attention feature size
+        # batch | attention heads | patches | attention feature size
         image_embeddings_query = (cupy.matmul(image_embeddings, axons_for_query) + dentrites_for_query).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
         image_embeddings_key = (cupy.matmul(image_embeddings, axons_for_key) + dentrites_for_key).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
         image_embeddings_value = (cupy.matmul(image_embeddings, axons_for_value) + dentrites_for_value).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
-        # attention scores -> batch | attention heads | tokens | tokens
-        attention_scores = cupy.matmul(image_embeddings_query, image_embeddings_key.transpose(0, 1, 3, 2))
+        # attention scores -> batch | attention heads | patches | patches
+        attention_scores = (cupy.matmul(image_embeddings_query, image_embeddings_key.transpose(0, 1, 3, 2))) / math.sqrt(attention_feature_size)
         # attention scores as probabilities
         attentions_probabilities = softmax(attention_scores)
         # image_patches_context -> batch | patches | attention heads | attention feature size
         image_patches_context = cupy.matmul(attentions_probabilities, image_embeddings_value).reshape(batch_size, num_tokens, num_attn_heads, attention_feature_size)
-        # batch | tokens | attention heads * attention feature size
+        # batch | patches | attention heads * attention feature size
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
-        # batch | tokens | network feature size
+        # batch | patches | network feature size
         attention_output = cupy.matmul(attention_output, output_attention_axons) + output_attnetion_dentrites
+
         attention_activations = [asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value)]
-        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_value), asnumpy(attentions_probabilities), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
+        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value), asnumpy(attentions_probabilities), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
         return attention_output, attention_activations, attention_parameters
 
     def encoder_mlp(attention_output, parameters=None):
@@ -149,6 +151,9 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         model_loss.backward()
         last_model_layer_gradients = cupy.array(model_prediction.grad)
         return cupy.array(model_loss.item()), last_model_layer_gradients
+    
+    def update_network_parameters(): pass
+    #TODO: Create a function for updating parameters
 
     def training_model(training_loader):
         for batched_image_patch, expected_word in training_loader:
@@ -162,6 +167,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
             image_embeddings_parameters, encoder_parameters, mlp_parameters, output_layer_parameters = model_outputs[6:]
             # Calculate network stress
             network_stress, last_layer_stress = calculate_network_stress(model_prediction, expected_word)
-            backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, encoder_parameters, image_embeddings_parameters)
-
+            mlp_stress, encoder_stress, embeddings_stress = backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, encoder_parameters, image_embeddings_parameters)
+            # Update network parameters
+            # update_network_parameters(image_embeddings_parameters, encoder_parameters, mlp_parametesr, output_layer_parameters)
     return training_model
