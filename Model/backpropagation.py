@@ -37,7 +37,7 @@ def backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, 
         # Get the gradients
         loss.backward()
         return cupy.array(layer_stress.grad)
-    
+
     def calculate_attention_stress(layer_stress_propagated, encoder_parameters):
         attention_parameters = encoder_parameters[0]
         # attn output layer stress
@@ -85,7 +85,7 @@ def backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, 
             encoder_stress = [mlp_layers_stress, attention_projections_stress]
             encoder_layers_stress.append(encoder_stress)
         return attention_stress_propagated, encoder_layers_stress
-    
+
     def calculate_input_embeddings_stress(layer_stress_propagated):
         input_embeddings_axons = image_embeddings_parameters[0]
         return cupy.matmul(layer_stress_propagated, cupy.array(input_embeddings_axons.transpose()))
