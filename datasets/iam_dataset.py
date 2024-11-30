@@ -1,5 +1,6 @@
 import os
 import numpy
+import random
 import cv2 as cv
 from datasets.utils import characters_to_ints
 from datasets.data_processing import image_array_processing
@@ -41,21 +42,29 @@ def iam_dataset(folder, txt_file, image_size, patch_width):
             extracted_data.append([image_array, word_as_character_tokens])
     return extracted_data
 
-def iam_dataloader(dataset, batch_size=128):
-    remaining_samples = len(dataset) % batch_size
-    batched_iterator = len(dataset) // batch_size
-    dataloader = []
-    for i in range(batched_iterator):
-        start_idx = i * batch_size
-        end_idx = start_idx + batch_size
-        pulled_data = dataset[start_idx:end_idx]
-        batched_image_array = numpy.stack([image_arr for image_arr, _ in pulled_data])
-        batched_word_token = numpy.stack([word_token for _, word_token in pulled_data])
-        dataloader.append([batched_image_array, batched_word_token])
-    if remaining_samples != 0:
-        # pulled the last remaining data
-        pulled_remaining_data = dataset[-remaining_samples:]
-        batched_image_array = numpy.stack([image_arr for image_arr, _ in pulled_remaining_data])
-        batched_word_token = numpy.stack([word_token for _, word_token in pulled_remaining_data])
-        dataloader.append([batched_image_array, batched_word_token])
-    return dataloader
+def iam_dataloader(dataset, batch_size=2048, training_samples_ratio=0.8, shuffle=True):
+    if shuffle:
+        random.shuffle(dataset)
+    split_idx = int(len(dataset) * training_samples_ratio)
+    training_split = dataset[:split_idx]
+    validation_split = dataset[split_idx:]
+    def batched_dataloader(data):
+        dataloader = []
+        remaining_samples = len(data) % batch_size
+        batched_iterator = len(data) // batch_size
+        for i in range(batched_iterator):
+            start_idx = i * batch_size
+            end_idx = start_idx + batch_size
+            pulled_data = data[start_idx:end_idx]
+            batched_image_array = numpy.stack([image_arr for image_arr, _ in pulled_data])
+            batched_word_token = numpy.stack([word_token for _, word_token in pulled_data])
+            dataloader.append([batched_image_array, batched_word_token])
+        if remaining_samples != 0:
+            pulled_remaining_samples = data[-remaining_samples:]
+            batched_image_array = numpy.stack([image_arr for image_arr, _ in pulled_remaining_samples])
+            batched_word_token = numpy.stack([word_token for _, word_token in pulled_remaining_samples])
+            dataloader.append([batched_image_array, batched_word_token])
+        return dataloader
+    train_dataloader = batched_dataloader(training_split)
+    validation_dataloader = batched_dataloader(validation_split)
+    return train_dataloader, validation_dataloader
