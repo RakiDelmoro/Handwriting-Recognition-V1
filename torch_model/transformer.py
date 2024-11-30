@@ -10,6 +10,7 @@ class ImageEmbeddings(nn.Module):
         super().__init__()
         patch_h, patch_w = PATCH_SIZE
         num_patches = NUM_PATCHES
+        # Rearrange from: batch | height | width -> batch | patches | height | patch width
         self.to_patch_embedding = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_h*patch_w, NETWORK_FEATURE_SIZE))
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE))
 
@@ -122,17 +123,15 @@ class Transformer(nn.Module):
         model_prediction = self.output_activation(self.model_output_prediction(mlp_output))
         return model_prediction
 
-    def get_model_stress(self, model_prediction, expected_prediction):
+    def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
+        optimizer = optimizer(self.parameters(), lr=learning_rate)
         batch, length, _ = model_prediction.shape
         transpose_for_loss = model_prediction.transpose(0, 1)
         image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
         actual_tokens_length = unpadded_length_tokens(expected_prediction)
         loss_func = nn.CTCLoss(blank=1)
         loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
         return loss
-
-    def training_layers(self, dataloader):
-        for image_array, expected_array in dataloader:
-            model_prediction = self.forward(image_array)
-            model_stress = self.get_model_stress(model_prediction, expected_array)
-            return model_stress
