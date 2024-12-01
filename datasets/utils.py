@@ -1,4 +1,5 @@
 import string
+from torch.utils.data import random_split
 from itertools import takewhile
 
 def get_printable(character):
@@ -6,6 +7,11 @@ def get_printable(character):
     if character == START_TOKEN: return "🚦"
     if character == END_TOKEN: return "🤚"
     return character
+
+def split_data(dataset, ratio):
+    training_size = int(ratio * len(dataset))
+    validation_size = int(len(dataset) - training_size)
+    return random_split(dataset, [training_size, validation_size])
 
 LETTERS = [letter for letter in string.ascii_letters]
 NUMBERS = [number for number in string.digits]
