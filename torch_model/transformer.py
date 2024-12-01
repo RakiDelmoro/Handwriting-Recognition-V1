@@ -73,12 +73,14 @@ class Layer(nn.Module):
         super().__init__()
         self.multi_head_attetion = MultiHeadAttention()
         self.mlp_encoder = EncoderMultiLayerPerceptron()
-    
+        self.attention_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE)
+        self.mlp_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE)
+
     def forward(self, input_embeddings: torch.Tensor):
-        attention_output = self.multi_head_attetion(input_embeddings)
+        attention_output = self.attention_output_activation_normalization(self.multi_head_attetion(input_embeddings))
         # first residual connection
         residual_connection_1 = attention_output + input_embeddings
-        mlp_output = self.mlp_encoder(residual_connection_1)
+        mlp_output = self.mlp_output_activation_normalization(self.mlp_encoder(residual_connection_1))
         # second residual connection
         residual_connection_2 = mlp_output + residual_connection_1
         return residual_connection_2
@@ -114,7 +116,7 @@ class Transformer(nn.Module):
         self.encoder_layers = EncoderLayer()
         self.multi_layer_perceptron = MultiLayerPerceptron()
         self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES)
-        self.output_activation = nn.LogSoftmax(dim=-1)
+        self.output_activation = nn.Softmax(dim=-1)
 
     def forward(self, batched_image_array):
         input_embeddings = self.image_embeddings(batched_image_array)
@@ -125,12 +127,11 @@ class Transformer(nn.Module):
 
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
         optimizer = optimizer(self.parameters(), lr=learning_rate)
-        batch, length, _ = model_prediction.shape
-        transpose_for_loss = model_prediction.transpose(0, 1)
-        image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
-        actual_tokens_length = unpadded_length_tokens(expected_prediction)
-        loss_func = nn.CTCLoss(blank=1)
-        loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
+        _, _, number_of_classes = model_prediction.shape
+        model_prediction = model_prediction.reshape(-1, number_of_classes)
+        expected_prediction = expected_prediction.reshape(-1)
+        loss_func = nn.CrossEntropyLoss()
+        loss = loss_func(model_prediction, expected_prediction)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
