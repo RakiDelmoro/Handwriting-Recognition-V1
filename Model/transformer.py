@@ -45,16 +45,16 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         # attention scores -> batch | attention heads | patches | patches
         attention_scores = (cupy.matmul(image_embeddings_query, image_embeddings_key.transpose(0, 1, 3, 2))) / math.sqrt(attention_feature_size)
         # attention scores as probabilities
-        attentions_probabilities = softmax(attention_scores)
+        attention_axons = softmax(attention_scores)
         # image_patches_context -> batch | patches | attention heads | attention feature size
-        image_patches_context = cupy.matmul(attentions_probabilities, image_embeddings_value).reshape(batch_size, num_tokens, num_attn_heads, attention_feature_size)
+        image_patches_context = cupy.matmul(attention_axons, image_embeddings_value).reshape(batch_size, num_tokens, num_attn_heads, attention_feature_size)
         # batch | patches | attention heads * attention feature size
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
         # batch | patches | network feature size
         attention_output = cupy.matmul(attention_output, output_attention_axons) + output_attnetion_dentrites
 
         attention_activations = [asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value)]
-        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value), asnumpy(attentions_probabilities), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
+        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value), asnumpy(attention_axons), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
         return attention_output, attention_activations, attention_parameters
 
     def encoder_mlp(attention_output, parameters=None):
@@ -151,7 +151,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         model_loss.backward()
         last_model_layer_gradients = cupy.array(model_prediction.grad)
         return cupy.array(model_loss.item()), last_model_layer_gradients
-    
+
     def update_network_parameters(): pass
     #TODO: Create a function for updating parameters
 
