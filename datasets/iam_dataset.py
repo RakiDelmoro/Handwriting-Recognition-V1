@@ -12,12 +12,19 @@ def image_to_array(folder, image_path, size, patch_width):
     image_inner_folder = "-".join(split_image_path[:2])
     complete_image_path = os.path.join(folder, image_outer_folder, image_inner_folder, image_path)
     image_array = cv.imread(complete_image_path)
-    if image_array is not None:
-        image_array_as_grayscale = cv.cvtColor(image_array, cv.COLOR_RGB2GRAY)
-        return image_array_processing(image_array_as_grayscale, size, patch_width)
-    else: return None
+    image_array_as_grayscale = cv.cvtColor(image_array, cv.COLOR_RGB2GRAY)
+    return image_array_processing(image_array_as_grayscale, size, patch_width)
 
-def word_to_token_array(text, max_length=19):
+def check_if_image_is_corrupted(folder, image_path):
+    split_image_path = image_path.split('-')
+    image_outer_folder = split_image_path[0]
+    image_inner_folder = "-".join(split_image_path[:2])
+    complete_image_path = os.path.join(folder, image_outer_folder, image_inner_folder, image_path)
+    image_array = cv.imread(complete_image_path)
+    is_corrupted = image_array is None
+    return is_corrupted
+
+def word_to_token_array(text, max_length=30):
     number_of_pad_tokens = max_length - len(text)
     word_as_char_tokens = characters_to_ints(START_TOKEN) + characters_to_ints(text) + characters_to_ints(END_TOKEN)
     if number_of_pad_tokens != 0: word_as_char_tokens.extend(characters_to_ints(PAD_TOKEN) * number_of_pad_tokens)
@@ -35,11 +42,10 @@ def iam_dataset(folder, txt_file, image_size, patch_width):
         if data_not_corrupted:
             image_path = line_data_as_list[0] + '.png'
             word_written_in_image = ' '.join(line_data_as_list[8:])
-            image_array = image_to_array(folder, image_path, image_size, patch_width)
-            if image_array is None: continue
+            image_corrupted = check_if_image_is_corrupted(folder, image_path)
+            if image_corrupted: continue
             if len(word_written_in_image) == 1: continue
-            word_as_character_tokens = word_to_token_array(word_written_in_image)
-            extracted_data.append([image_array, word_as_character_tokens])
+            extracted_data.append([image_path, word_written_in_image])
     return extracted_data
 
 def iam_dataloader(dataset, batch_size=2048, training_samples_ratio=0.8, shuffle=True):
