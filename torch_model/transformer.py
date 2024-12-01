@@ -3,16 +3,16 @@ import torch
 import torch.nn as nn
 from Model.utils import unpadded_length_tokens
 from einops.layers.torch import Rearrange
-from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES
+from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, DEVICE
 
 class ImageEmbeddings(nn.Module):
     def __init__(self):
         super().__init__()
         patch_h, patch_w = PATCH_SIZE
         num_patches = NUM_PATCHES
-        # Rearrange from: batch | height | width -> batch | patches | height | patch width
-        self.to_patch_embedding = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_h*patch_w, NETWORK_FEATURE_SIZE))
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE))
+        # Rearrange from: batch | height | width To: batch | patches | height | patch width
+        self.to_patch_embedding = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_h*patch_w, NETWORK_FEATURE_SIZE, device=DEVICE))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE, device=DEVICE))
 
     def forward(self, batched_image_array: torch.Tensor):
         input_embeddings = self.to_patch_embedding(batched_image_array)
@@ -25,10 +25,10 @@ class MultiHeadAttention(nn.Module):
         self.attention_feature_size = ATTENTION_FEATURE_SIZE
         self.num_heads = NUM_ATTENTION_HEADS
         self.total_attention_feature_size = NUM_ATTENTION_HEADS*ATTENTION_FEATURE_SIZE
-        self.query = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size)
-        self.key = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size)
-        self.value = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size)
-        self.attn_output_layer = nn.Linear(self.total_attention_feature_size, NETWORK_FEATURE_SIZE)
+        self.query = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size, device=DEVICE)
+        self.key = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size, device=DEVICE)
+        self.value = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size, device=DEVICE)
+        self.attn_output_layer = nn.Linear(self.total_attention_feature_size, NETWORK_FEATURE_SIZE, device=DEVICE)
     
     def transpose_for_attn_scores(self, x: torch.Tensor) -> torch.Tensor:
         # batch | patches | attn_heads | attention_dimension
@@ -58,8 +58,8 @@ class MultiHeadAttention(nn.Module):
 class EncoderMultiLayerPerceptron(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE)
-        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE)
+        self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
+        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
         self.activation_function = nn.ReLU()
 
     def forward(self, attention_output: torch.Tensor):
@@ -73,8 +73,8 @@ class Layer(nn.Module):
         super().__init__()
         self.multi_head_attetion = MultiHeadAttention()
         self.mlp_encoder = EncoderMultiLayerPerceptron()
-        self.attention_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE)
-        self.mlp_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE)
+        self.attention_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE, device=DEVICE)
+        self.mlp_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE, device=DEVICE)
 
     def forward(self, input_embeddings: torch.Tensor):
         attention_output = self.attention_output_activation_normalization(self.multi_head_attetion(input_embeddings))
@@ -92,15 +92,14 @@ class EncoderLayer(nn.Module):
         self.encoder_layers = nn.ModuleList([self.layer for _ in range(NUM_LAYERS)])
     
     def forward(self, input_embeddings: torch.Tensor):
-        layer_output = input_embeddings
-        for layer in self.encoder_layers: layer_output = layer(layer_output)
+        for layer in self.encoder_layers: layer_output = layer(input_embeddings)
         return layer_output
 
 class MultiLayerPerceptron(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE)
-        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE)
+        self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
+        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
         self.activation_function = nn.ReLU()
     
     def forward(self, encoder_output: torch.Tensor):
@@ -115,7 +114,7 @@ class Transformer(nn.Module):
         self.image_embeddings = ImageEmbeddings()
         self.encoder_layers = EncoderLayer()
         self.multi_layer_perceptron = MultiLayerPerceptron()
-        self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES)
+        self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES, device=DEVICE)
         self.output_activation = nn.Softmax(dim=-1)
 
     def forward(self, batched_image_array):
@@ -124,15 +123,25 @@ class Transformer(nn.Module):
         mlp_output = self.multi_layer_perceptron(encoder_output)
         model_prediction = self.output_activation(self.model_output_prediction(mlp_output))
         return model_prediction
-
+    
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
         optimizer = optimizer(self.parameters(), lr=learning_rate)
-        _, _, number_of_classes = model_prediction.shape
-        model_prediction = model_prediction.reshape(-1, number_of_classes)
-        expected_prediction = expected_prediction.reshape(-1)
-        loss_func = nn.CrossEntropyLoss()
-        loss = loss_func(model_prediction, expected_prediction)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        batch, length, _ = model_prediction.shape
+        transpose_for_loss = model_prediction.transpose(0, 1)
+        image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
+        actual_tokens_length = unpadded_length_tokens(expected_prediction)
+        loss_func = nn.CTCLoss(blank=1)
+        loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
         return loss
+
+    # def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
+    #     optimizer = optimizer(self.parameters(), lr=learning_rate)
+    #     _, _, number_of_classes = model_prediction.shape
+    #     model_prediction = model_prediction.reshape(-1, number_of_classes)
+    #     expected_prediction = expected_prediction.reshape(-1)
+    #     loss_func = nn.CrossEntropyLoss(ignore_index=1)
+    #     loss = loss_func(model_prediction, expected_prediction)
+    #     optimizer.zero_grad()
+    #     loss.backward()
+    #     optimizer.step()
+    #     return loss
