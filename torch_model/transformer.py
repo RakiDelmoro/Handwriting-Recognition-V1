@@ -1,8 +1,9 @@
 import math
 import torch
 import torch.nn as nn
-from Model.utils import unpadded_length_tokens
 from einops.layers.torch import Rearrange
+from Model.utils import unpadded_length_tokens
+from datasets.utils import ints_to_characters, char_to_index, PAD_TOKEN
 from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, DEVICE
 
 class ImageEmbeddings(nn.Module):
@@ -29,7 +30,7 @@ class MultiHeadAttention(nn.Module):
         self.key = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size, device=DEVICE)
         self.value = nn.Linear(NETWORK_FEATURE_SIZE, self.total_attention_feature_size, device=DEVICE)
         self.attn_output_layer = nn.Linear(self.total_attention_feature_size, NETWORK_FEATURE_SIZE, device=DEVICE)
-    
+
     def transpose_for_attn_scores(self, x: torch.Tensor) -> torch.Tensor:
         # batch | patches | attn_heads | attention_dimension
         new_x_shape = x.shape[:-1] + (self.num_heads, self.attention_feature_size)
@@ -73,6 +74,7 @@ class Layer(nn.Module):
         super().__init__()
         self.multi_head_attetion = MultiHeadAttention()
         self.mlp_encoder = EncoderMultiLayerPerceptron()
+        # Layer norm keeps the layer activation bounded for all samples in a batch
         self.attention_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE, device=DEVICE)
         self.mlp_output_activation_normalization = nn.LayerNorm(NETWORK_FEATURE_SIZE, device=DEVICE)
 
@@ -90,7 +92,7 @@ class EncoderLayer(nn.Module):
         super().__init__()
         self.layer = Layer()
         self.encoder_layers = nn.ModuleList([self.layer for _ in range(NUM_LAYERS)])
-    
+
     def forward(self, input_embeddings: torch.Tensor):
         for layer in self.encoder_layers: layer_output = layer(input_embeddings)
         return layer_output
@@ -101,7 +103,7 @@ class MultiLayerPerceptron(nn.Module):
         self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
         self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
         self.activation_function = nn.ReLU()
-    
+
     def forward(self, encoder_output: torch.Tensor):
         layer_1_output = self.linear_layer_1(encoder_output)
         activation_function_output = self.activation_function(layer_1_output)
@@ -115,7 +117,7 @@ class Transformer(nn.Module):
         self.encoder_layers = EncoderLayer()
         self.multi_layer_perceptron = MultiLayerPerceptron()
         self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES, device=DEVICE)
-        self.output_activation = nn.Softmax(dim=-1)
+        self.output_activation = nn.LogSoftmax(dim=-1)
 
     def forward(self, batched_image_array):
         input_embeddings = self.image_embeddings(batched_image_array)
@@ -123,25 +125,24 @@ class Transformer(nn.Module):
         mlp_output = self.multi_layer_perceptron(encoder_output)
         model_prediction = self.output_activation(self.model_output_prediction(mlp_output))
         return model_prediction
-    
+
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
         optimizer = optimizer(self.parameters(), lr=learning_rate)
         batch, length, _ = model_prediction.shape
         transpose_for_loss = model_prediction.transpose(0, 1)
         image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
         actual_tokens_length = unpadded_length_tokens(expected_prediction)
-        loss_func = nn.CTCLoss(blank=1)
+        loss_func = nn.CTCLoss(blank=char_to_index[PAD_TOKEN])
         loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
         return loss
 
-    # def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
-    #     optimizer = optimizer(self.parameters(), lr=learning_rate)
-    #     _, _, number_of_classes = model_prediction.shape
-    #     model_prediction = model_prediction.reshape(-1, number_of_classes)
-    #     expected_prediction = expected_prediction.reshape(-1)
-    #     loss_func = nn.CrossEntropyLoss(ignore_index=1)
-    #     loss = loss_func(model_prediction, expected_prediction)
-    #     optimizer.zero_grad()
-    #     loss.backward()
-    #     optimizer.step()
-    #     return loss
+    def prediction_as_indices(self, model_prediction):
+        model_prediction = model_prediction.data
+        model_prediction_indices = model_prediction.topk(1)[1].squeeze(-1).cpu().numpy()
+        return model_prediction_indices
+
+    def prediction_as_str(self, model_prediction_in_indies):
+        return ints_to_characters(model_prediction_in_indies)
