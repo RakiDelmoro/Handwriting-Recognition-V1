@@ -7,7 +7,7 @@ class IAMDataset(Dataset):
         self.folder = folder
         self.image_size = image_size
         self.patch_width = patch_width
-        self.dataset = iam_dataset(folder=folder, txt_file=txt_file, image_size=image_size, patch_width=patch_width)
+        self.dataset = iam_dataset(folder=folder, txt_file=txt_file)
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, index):
