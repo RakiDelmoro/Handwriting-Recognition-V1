@@ -30,7 +30,7 @@ def word_to_token_array(text, max_length=30):
     if number_of_pad_tokens != 0: word_as_char_tokens.extend(characters_to_ints(PAD_TOKEN) * number_of_pad_tokens)
     return numpy.array(word_as_char_tokens, dtype=numpy.uint8)
 
-def iam_dataset(folder, txt_file, image_size, patch_width):
+def iam_dataset(folder, txt_file):
     # a01-000u-06-05 ok 159 1910 1839 458 63 NP Exchange - Example of each line data
     extracted_data = []
     dataset_text_line = open(os.path.join(folder, txt_file)).read().splitlines()
