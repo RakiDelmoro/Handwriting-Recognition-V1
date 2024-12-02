@@ -45,22 +45,21 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
         list_of_similarities = [similarity for each_dict in per_batch_str_similarities for similarity in each_dict.keys()]
         highest_similarities = sorted(list_of_similarities, reverse=True)[:5]
         lowest_similarties = sorted(list_of_similarities)[:5]
-    
+
+        low_similarities_counter = 0
         for each in per_batch_str_similarities:
-            counter = 0
             string_distance, model_and_expected_str = next(iter(each.items()))
             if string_distance in lowest_similarties:
                 print(f"Predicted: {model_and_expected_str[0]}, Expected: {model_and_expected_str[1]}")
-                counter+=1
-            if counter >= len(lowest_similarties): break
-        
+                low_similarities_counter += 1
+            if low_similarities_counter >= len(lowest_similarties): break
+        highest_similarities_counter = 0
         for each in per_batch_str_similarities:
-            counter = 0
             string_distance, model_and_expected_str = next(iter(each.items()))
             if string_distance in highest_similarities:
                 print(f"Predicted: {model_and_expected_str[0]} Expected: {model_and_expected_str[1]}")
-                counter+=1
-            if counter >= len(highest_similarities): break
+                highest_similarities_counter += 1
+            if highest_similarities_counter >= len(highest_similarities): break
 
     for each in range(epochs):
         average_stress = training()
