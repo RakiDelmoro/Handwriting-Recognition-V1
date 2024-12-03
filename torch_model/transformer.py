@@ -4,7 +4,27 @@ import torch.nn as nn
 from einops.layers.torch import Rearrange
 from Model.utils import unpadded_length_tokens
 from datasets.utils import ints_to_characters, char_to_index, PAD_TOKEN
-from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, DEVICE
+from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, MAX_PATCHES_LENGTH, DEVICE
+
+class CNNFeatureExtraction():
+    pass
+
+class PositionalEncoding(nn.Module):
+    def __init__(self):
+        super().__init__()
+        position = torch.arange(MAX_PATCHES_LENGTH).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, NETWORK_FEATURE_SIZE, 2) * (-math.log(10000.0) / NETWORK_FEATURE_SIZE))
+        pe = torch.zeros(MAX_PATCHES_LENGTH, 1, NETWORK_FEATURE_SIZE)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Arguments: x: Tensor, shape ``[seq_len, batch_size, embedding_dim]`` """
+        _, patches, _ = x.shape
+        # x = x.transpose(0, 1)
+        x = x + self.pe[:patches]
+        return 
 
 class ImageEmbeddings(nn.Module):
     def __init__(self):
@@ -13,7 +33,7 @@ class ImageEmbeddings(nn.Module):
         num_patches = NUM_PATCHES
         # Rearrange from: batch | height | width To: batch | patches | height | patch width
         self.to_patch_embedding = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_h*patch_w, NETWORK_FEATURE_SIZE, device=DEVICE))
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE, device=DEVICE))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE, device=DEVICE), requires_grad=False)
 
     def forward(self, batched_image_array: torch.Tensor):
         input_embeddings = self.to_patch_embedding(batched_image_array)
@@ -94,7 +114,8 @@ class EncoderLayer(nn.Module):
         self.encoder_layers = nn.ModuleList([self.layer for _ in range(NUM_LAYERS)])
 
     def forward(self, input_embeddings: torch.Tensor):
-        for layer in self.encoder_layers: layer_output = layer(input_embeddings)
+        layer_output = input_embeddings
+        for layer in self.encoder_layers: layer_output = layer(layer_output)
         return layer_output
 
 class MultiLayerPerceptron(nn.Module):
