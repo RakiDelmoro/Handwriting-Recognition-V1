@@ -149,8 +149,8 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         model_loss = ctc_loss(model_prediction, expected_prediction, image_patches_length, word_token_length)
         # get the model prediction gradients
         model_loss.backward()
-        last_model_layer_gradients = cupy.array(model_prediction.grad)
-        return cupy.array(model_loss.item()), last_model_layer_gradients
+        last_layer_stress = cupy.array(model_prediction.grad)
+        return cupy.array(model_loss.item()), last_layer_stress
 
     def update_network_parameters(): pass
     #TODO: Create a function for updating parameters
