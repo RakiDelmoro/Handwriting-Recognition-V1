@@ -31,5 +31,5 @@ def image_array_processing(image_array, image_fixed_size, patch_width):
     inverted_image_array = cv.bitwise_not(rotated_image_array)
     normalized_image_array = cv.normalize(inverted_image_array, None, 0, 1, cv.NORM_MINMAX, cv.CV_32F)
     # cv.imwrite('test.png', visualize_patched_image(inverted_image_array))
-    return normalized_image_array
+    return normalized_image_array.reshape(1, image_fixed_size[0], image_fixed_size[1])
     # return einops.rearrange(normalized_image_array, 'height (width patch_width) -> (width) height patch_width', patch_width=patch_width)
