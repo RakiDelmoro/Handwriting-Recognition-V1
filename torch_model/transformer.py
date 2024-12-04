@@ -30,6 +30,22 @@ class CNNFeatureExtraction(nn.Module):
         flattened_conv6_output = conv6_output.reshape(batch, channels, -1)
         return self.layer_output(flattened_conv6_output)
 
+class PositionalEncoding(nn.Module):
+    """ Use cos-sin wave for position of each patches in sequence """
+    def __init__(self):
+        super().__init__()
+        position = torch.arange(MAX_PATCHES_LENGTH, device=DEVICE).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, NETWORK_FEATURE_SIZE, 2, device=DEVICE) * (-math.log(10000.0) / NETWORK_FEATURE_SIZE))
+        pe = torch.zeros(MAX_PATCHES_LENGTH, 1, NETWORK_FEATURE_SIZE, device=DEVICE)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ Arguments: x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``"""
+        x = x.transpose(0, 1)
+        x = x + self.pe[:x.size(0)]
+        return x.transpose(0, 1)
+
 class ImageEmbeddings(nn.Module):
     def __init__(self):
         super().__init__()
