@@ -24,7 +24,7 @@ def check_if_image_is_corrupted(folder, image_path):
     is_corrupted = image_array is None
     return is_corrupted
 
-def word_to_token_array(text, max_length=30):
+def word_to_token_array(text, max_length=31):
     number_of_pad_tokens = max_length - len(text)
     word_as_char_tokens = characters_to_ints(START_TOKEN) + characters_to_ints(text) + characters_to_ints(END_TOKEN)
     if number_of_pad_tokens != 0: word_as_char_tokens.extend(characters_to_ints(PAD_TOKEN) * number_of_pad_tokens)
