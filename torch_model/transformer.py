@@ -1,5 +1,6 @@
 import math
 import torch
+import random
 import torch.nn as nn
 from einops.layers.torch import Rearrange
 from Model.utils import unpadded_length_tokens
@@ -49,17 +50,25 @@ class PositionalEncoding(nn.Module):
 class ImageEmbeddings(nn.Module):
     def __init__(self):
         super().__init__()
-        # Special token that has a access to all image patches information (TRAINABLE!)
-        self.special_token = nn.Parameter(torch.zeros(1, 1, NETWORK_FEATURE_SIZE, device=DEVICE))
         self.cnn_extraction = CNNFeatureExtraction()
         self.position_embeddings = PositionalEncoding()
+
+    def masked_patches(self, image_patches, span_masked_ratio, max_span_length):
+        batch, patches, _ = image_patches.shape
+        mask_patches = torch.ones(batch, patches, 1, device=DEVICE)
+        span_patches_length = int(patches * span_masked_ratio)
+        total_span = span_patches_length // max_span_length
+        for _ in range(total_span):
+            idx = random.randint(0, patches-10)
+            mask_patches[:, idx:idx + max_span_length, :] = 0
+        return mask_patches
 
     def forward(self, batched_image_array: torch.Tensor):
         batch, _, _, _ = batched_image_array.shape
         feature_extracted = self.cnn_extraction(batched_image_array)
-        special_token = self.special_token.expand(batch, -1, -1)
-        feature_extracted_with_special_token = torch.cat((feature_extracted, special_token), dim=1)
-        tokens_with_positional_embedding = self.position_embeddings(feature_extracted_with_special_token)
+        masked_feature_patches = self.masked_patches(image_patches=feature_extracted, span_masked_ratio=0.2, max_span_length=2)
+
+        tokens_with_positional_embedding = self.position_embeddings(feature_extracted)
         return tokens_with_positional_embedding
 
 class MultiHeadAttention(nn.Module):
