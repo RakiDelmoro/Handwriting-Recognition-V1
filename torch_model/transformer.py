@@ -3,42 +3,48 @@ import torch
 import torch.nn as nn
 from einops.layers.torch import Rearrange
 from Model.utils import unpadded_length_tokens
-from datasets.utils import ints_to_characters, char_to_index, PAD_TOKEN
-from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_PATCHES, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, MAX_PATCHES_LENGTH, DEVICE
+from datasets.utils import ints_to_characters, char_to_index, END_TOKEN, PAD_TOKEN
+from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, BATCH_SIZE, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, MAX_PATCHES_LENGTH, DEVICE
 
-class CNNFeatureExtraction():
-    pass
-
-class PositionalEncoding(nn.Module):
+class CNNFeatureExtraction(nn.Module):
     def __init__(self):
         super().__init__()
-        position = torch.arange(MAX_PATCHES_LENGTH).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, NETWORK_FEATURE_SIZE, 2) * (-math.log(10000.0) / NETWORK_FEATURE_SIZE))
-        pe = torch.zeros(MAX_PATCHES_LENGTH, 1, NETWORK_FEATURE_SIZE)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Arguments: x: Tensor, shape ``[seq_len, batch_size, embedding_dim]`` """
-        _, patches, _ = x.shape
-        # x = x.transpose(0, 1)
-        x = x + self.pe[:patches]
-        return 
+        self.first_layer_conv = nn.Sequential(nn.Conv2d(in_channels=1, out_channels=8, kernel_size=(7,7), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
+        self.second_layer_conv = nn.Sequential(nn.Conv2d(in_channels=8, out_channels=8, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
+        self.third_layer_conv = nn.Sequential(nn.Conv2d(in_channels=8, out_channels=16, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
+        self.fourth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.fifth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.sixth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.activation_function = nn.ReLU()
+        self.layer_output = nn.Linear(240, NETWORK_FEATURE_SIZE, device=DEVICE) #TODO: Avoid hard coded in features
+
+    def forward(self, batched_image):
+        conv1_output = self.activation_function(self.first_layer_conv(batched_image))
+        conv2_output = self.activation_function(self.second_layer_conv(conv1_output))
+        conv3_output = self.activation_function(self.third_layer_conv(conv2_output))
+        conv4_output = self.activation_function(self.fourth_layer_conv(conv3_output))
+        conv5_output = self.activation_function(self.fifth_layer_conv(conv4_output))
+        conv6_output = self.activation_function(self.sixth_layer_conv(conv5_output))
+        batch, channels, _, _ = conv6_output.shape
+        # Flatten H, W 
+        flattened_conv6_output = conv6_output.reshape(batch, channels, -1)
+        return self.layer_output(flattened_conv6_output)
 
 class ImageEmbeddings(nn.Module):
     def __init__(self):
         super().__init__()
-        patch_h, patch_w = PATCH_SIZE
-        num_patches = NUM_PATCHES
-        # Rearrange from: batch | height | width To: batch | patches | height | patch width
-        self.to_patch_embedding = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_h*patch_w, NETWORK_FEATURE_SIZE, device=DEVICE))
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, NETWORK_FEATURE_SIZE, device=DEVICE), requires_grad=False)
+        # Special token that has a access to all image patches information (TRAINABLE!)
+        self.special_token = nn.Parameter(torch.zeros(1, 1, NETWORK_FEATURE_SIZE, device=DEVICE))
+        self.cnn_extraction = CNNFeatureExtraction()
+        self.position_embeddings = PositionalEncoding()
 
     def forward(self, batched_image_array: torch.Tensor):
-        input_embeddings = self.to_patch_embedding(batched_image_array)
-        embeddings = input_embeddings + self.position_embeddings
-        return embeddings
+        batch, _, _, _ = batched_image_array.shape
+        feature_extracted = self.cnn_extraction(batched_image_array)
+        special_token = self.special_token.expand(batch, -1, -1)
+        feature_extracted_with_special_token = torch.cat((feature_extracted, special_token), dim=1)
+        tokens_with_positional_embedding = self.position_embeddings(feature_extracted_with_special_token)
+        return tokens_with_positional_embedding
 
 class MultiHeadAttention(nn.Module):
     def __init__(self):
@@ -81,7 +87,7 @@ class EncoderMultiLayerPerceptron(nn.Module):
         super().__init__()
         self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
         self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
-        self.activation_function = nn.ReLU()
+        self.activation_function = nn.GELU()
 
     def forward(self, attention_output: torch.Tensor):
         layer_1_output = self.linear_layer_1(attention_output)
@@ -100,11 +106,9 @@ class Layer(nn.Module):
 
     def forward(self, input_embeddings: torch.Tensor):
         attention_output = self.attention_output_activation_normalization(self.multi_head_attetion(input_embeddings))
-        # first residual connection
-        residual_connection_1 = attention_output + input_embeddings
+        residual_connection_1 = attention_output + input_embeddings # first residual connection
         mlp_output = self.mlp_output_activation_normalization(self.mlp_encoder(residual_connection_1))
-        # second residual connection
-        residual_connection_2 = mlp_output + residual_connection_1
+        residual_connection_2 = mlp_output + residual_connection_1 # second residual connection
         return residual_connection_2
 
 class EncoderLayer(nn.Module):
@@ -136,32 +140,41 @@ class Transformer(nn.Module):
         super().__init__()
         self.image_embeddings = ImageEmbeddings()
         self.encoder_layers = EncoderLayer()
-        self.multi_layer_perceptron = MultiLayerPerceptron()
+        # self.multi_layer_perceptron = MultiLayerPerceptron()
         self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES, device=DEVICE)
-        self.output_activation = nn.LogSoftmax(dim=-1)
 
     def forward(self, batched_image_array):
         input_embeddings = self.image_embeddings(batched_image_array)
         encoder_output = self.encoder_layers(input_embeddings)
-        mlp_output = self.multi_layer_perceptron(encoder_output)
-        model_prediction = self.output_activation(self.model_output_prediction(mlp_output))
+        model_prediction = self.model_output_prediction(encoder_output)
         return model_prediction
+
+    # def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
+    #     optimizer = optimizer(self.parameters(), lr=learning_rate)
+    #     batch, length, _ = model_prediction.shape
+    #     transpose_for_loss = model_prediction.transpose(0, 1)
+    #     image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
+    #     actual_tokens_length = unpadded_length_tokens(expected_prediction)
+    #     loss_func = nn.CTCLoss(blank=char_to_index[END_TOKEN])
+    #     loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
+    #     optimizer.zero_grad()
+    #     loss.backward()
+    #     optimizer.step()
+    #     return loss
 
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
         optimizer = optimizer(self.parameters(), lr=learning_rate)
-        batch, length, _ = model_prediction.shape
-        transpose_for_loss = model_prediction.transpose(0, 1)
-        image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
-        actual_tokens_length = unpadded_length_tokens(expected_prediction)
-        loss_func = nn.CTCLoss(blank=char_to_index[PAD_TOKEN])
-        loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
+        loss_func = nn.CrossEntropyLoss(ignore_index=char_to_index[PAD_TOKEN])
+        model_prediction = model_prediction.view(-1, NUMBER_OF_CLASSES)
+        loss = loss_func(model_prediction, expected_prediction.view(-1))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         return loss
 
     def prediction_as_indices(self, model_prediction):
-        model_prediction = model_prediction.data
+        model_prediction_as_probabilities = torch.nn.Softmax(dim=-1).forward(model_prediction)
+        model_prediction = model_prediction_as_probabilities.data
         model_prediction_indices = model_prediction.topk(1)[1].squeeze(-1).cpu().numpy()
         return model_prediction_indices
 
