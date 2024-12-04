@@ -4,8 +4,8 @@ import random
 import torch.nn as nn
 from einops.layers.torch import Rearrange
 from Model.utils import unpadded_length_tokens
-from datasets.utils import ints_to_characters, char_to_index, END_TOKEN, PAD_TOKEN
-from Model.configurations import PATCH_SIZE, NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, BATCH_SIZE, MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, MAX_PATCHES_LENGTH, DEVICE
+from datasets.utils import ints_to_characters, char_to_index, PAD_TOKEN
+from Model.configurations import NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS,  MLP_FEATURE_SIZE, NUM_LAYERS, NUMBER_OF_CLASSES, MAX_PATCHES_LENGTH, DEVICE
 
 class CNNFeatureExtraction(nn.Module):
     def __init__(self):
@@ -52,6 +52,7 @@ class ImageEmbeddings(nn.Module):
         super().__init__()
         self.cnn_extraction = CNNFeatureExtraction()
         self.position_embeddings = PositionalEncoding()
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, NETWORK_FEATURE_SIZE, device=DEVICE))
 
     def masked_patches(self, image_patches, span_masked_ratio, max_span_length):
         batch, patches, _ = image_patches.shape
@@ -59,16 +60,15 @@ class ImageEmbeddings(nn.Module):
         span_patches_length = int(patches * span_masked_ratio)
         total_span = span_patches_length // max_span_length
         for _ in range(total_span):
-            idx = random.randint(0, patches-10)
+            idx = random.randint(0, patches-10) 
             mask_patches[:, idx:idx + max_span_length, :] = 0
-        return mask_patches
+        image_patches_with_random_masked = image_patches * mask_patches + (1 - mask_patches) * self.mask_token
+        return image_patches_with_random_masked
 
     def forward(self, batched_image_array: torch.Tensor):
-        batch, _, _, _ = batched_image_array.shape
         feature_extracted = self.cnn_extraction(batched_image_array)
         masked_feature_patches = self.masked_patches(image_patches=feature_extracted, span_masked_ratio=0.2, max_span_length=2)
-
-        tokens_with_positional_embedding = self.position_embeddings(feature_extracted)
+        tokens_with_positional_embedding = self.position_embeddings(masked_feature_patches)
         return tokens_with_positional_embedding
 
 class MultiHeadAttention(nn.Module):
@@ -173,19 +173,6 @@ class Transformer(nn.Module):
         encoder_output = self.encoder_layers(input_embeddings)
         model_prediction = self.model_output_prediction(encoder_output)
         return model_prediction
-
-    # def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
-    #     optimizer = optimizer(self.parameters(), lr=learning_rate)
-    #     batch, length, _ = model_prediction.shape
-    #     transpose_for_loss = model_prediction.transpose(0, 1)
-    #     image_patches_length = torch.full(size=(batch,), fill_value=length, dtype=torch.long)
-    #     actual_tokens_length = unpadded_length_tokens(expected_prediction)
-    #     loss_func = nn.CTCLoss(blank=char_to_index[END_TOKEN])
-    #     loss = loss_func(transpose_for_loss, expected_prediction, image_patches_length, actual_tokens_length)
-    #     optimizer.zero_grad()
-    #     loss.backward()
-    #     optimizer.step()
-    #     return loss
 
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
         optimizer = optimizer(self.parameters(), lr=learning_rate)
