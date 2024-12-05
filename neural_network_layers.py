@@ -10,7 +10,7 @@ def cupy_array(x):
 def linear_neurons_activations(input_neurons, axons, dentrites, activation_function=None):
     if activation_function is None: return cupy.matmul(input_neurons, axons, dtype=cupy.float32) + dentrites
     else: return activation_function(cupy.matmul(input_neurons, axons, dtype=cupy.float32) + dentrites) 
-    
+
 def convolution_neurons(input_image, axons, dentrites, linear_axons, step_of_patch_window):
     ''' input_neurons shape -> batch | img_channels (I will think of it as a patches) | height | width
         axons -> output_neurons_patches| input_neurons_patches | patch_window_height | patch_window_width 
