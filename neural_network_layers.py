@@ -22,7 +22,9 @@ def convolution_neurons(input_image, axons, step_of_patch_window):
             horizontal_pixel_start = j*step_of_patch_window
             horizontal_pixel_end = j*step_of_patch_window+patch_window_w
             image_windows = input_image_expanded[:, :, :, vertical_pixel_start:vertical_pixel_end, horizontal_pixel_start:horizontal_pixel_end]
-            image_featured_extracted[:, :, i, j] = cupy.sum(image_windows * axons_expanded, axis=(2, 3, 4))
+            extracted_feature_based_on_window_size = image_windows * axons_expanded
+            aggregate_extracted_feature = cupy.sum(extracted_feature_based_on_window_size, axis=(2,3,4))
+            image_featured_extracted[:, :, i, j] = aggregate_extracted_feature
     return image_featured_extracted
 
 def attention_mechanism_neurons():
