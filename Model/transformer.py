@@ -1,4 +1,3 @@
-import numpy as np
 import cupy
 import torch
 import math
@@ -8,7 +7,6 @@ from Model.backpropagation import backpropagation
 from Model.utils import axons_and_dentrites_initialization, softmax, unpadded_length_tokens, log_softmax
 
 def transformer_model(network_feature_size, num_attn_heads, num_layers, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
-
     def image_patches_embeddings(image_patches, parameters=None):
         batch_size = image_patches.shape[0]
         num_patches = image_patches.shape[1]
