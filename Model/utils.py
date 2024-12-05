@@ -9,16 +9,12 @@ def unpadded_length_tokens(word_tokens):
     return length
 
 def leaky_relu(input_data, return_derivative=False):
-    if return_derivative:
-        return cupy.where(input_data > 0, 1, 0.05 * input_data)
-    else:
-        return cupy.maximum(input_data * 0.05, input_data)
+    if return_derivative: return cupy.where(input_data > 0, 1, 0.05 * input_data)
+    else: return cupy.maximum(input_data * 0.05, input_data)
 
 def relu(input_data, return_derivative=False):
-    if return_derivative:
-        return cupy.where(input_data > 0, 1, 0)
-    else:
-        return cupy.maximum(0, input_data)
+    if return_derivative: return cupy.where(input_data > 0, 1, 0)
+    else: return cupy.maximum(0, input_data)
 
 def sigmoid(input_data, return_derivative=False):
     if return_derivative:
