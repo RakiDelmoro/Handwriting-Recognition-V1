@@ -13,9 +13,9 @@ class CNNFeatureExtraction(nn.Module):
         self.first_layer_conv = nn.Sequential(nn.Conv2d(in_channels=1, out_channels=8, kernel_size=(7,7), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
         self.second_layer_conv = nn.Sequential(nn.Conv2d(in_channels=8, out_channels=8, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
         self.third_layer_conv = nn.Sequential(nn.Conv2d(in_channels=8, out_channels=16, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=1))
-        self.fourth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
-        self.fifth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
-        self.sixth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=32, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.fourth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=16, out_channels=16, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.fifth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=16, out_channels=22, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
+        self.sixth_layer_conv = nn.Sequential(nn.Conv2d(in_channels=22, out_channels=22, kernel_size=(3,3), stride=1, device=DEVICE), nn.MaxPool2d(kernel_size=(2,2), stride=2))
         self.activation_function = nn.ReLU()
         self.layer_output = nn.Linear(240, NETWORK_FEATURE_SIZE, device=DEVICE) #TODO: Avoid hard coded in features
 
@@ -27,7 +27,7 @@ class CNNFeatureExtraction(nn.Module):
         conv5_output = self.activation_function(self.fifth_layer_conv(conv4_output))
         conv6_output = self.activation_function(self.sixth_layer_conv(conv5_output))
         batch, channels, _, _ = conv6_output.shape
-        # Flatten H, W 
+        # Flattened H, W 
         flattened_conv6_output = conv6_output.reshape(batch, channels, -1)
         return self.layer_output(flattened_conv6_output)
 
@@ -60,14 +60,14 @@ class ImageEmbeddings(nn.Module):
         span_patches_length = int(patches * span_masked_ratio)
         total_span = span_patches_length // max_span_length
         for _ in range(total_span):
-            idx = random.randint(0, patches-10) 
+            idx = random.randint(0, patches) 
             mask_patches[:, idx:idx + max_span_length, :] = 0
         image_patches_with_random_masked = image_patches * mask_patches + (1 - mask_patches) * self.mask_token
         return image_patches_with_random_masked
 
     def forward(self, batched_image_array: torch.Tensor):
         feature_extracted = self.cnn_extraction(batched_image_array)
-        masked_feature_patches = self.masked_patches(image_patches=feature_extracted, span_masked_ratio=0.2, max_span_length=2)
+        masked_feature_patches = self.masked_patches(image_patches=feature_extracted, span_masked_ratio=0.4, max_span_length=1)
         tokens_with_positional_embedding = self.position_embeddings(masked_feature_patches)
         return tokens_with_positional_embedding
 
@@ -152,7 +152,7 @@ class MultiLayerPerceptron(nn.Module):
         super().__init__()
         self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
         self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
-        self.activation_function = nn.ReLU()
+        self.activation_function = nn.GELU()
 
     def forward(self, encoder_output: torch.Tensor):
         layer_1_output = self.linear_layer_1(encoder_output)
@@ -165,7 +165,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.image_embeddings = ImageEmbeddings()
         self.encoder_layers = EncoderLayer()
-        # self.multi_layer_perceptron = MultiLayerPerceptron()
+        self.multi_layer_perceptron = MultiLayerPerceptron()
         self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, NUMBER_OF_CLASSES, device=DEVICE)
 
     def forward(self, batched_image_array):
