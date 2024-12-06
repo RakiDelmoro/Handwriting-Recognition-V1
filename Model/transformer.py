@@ -4,7 +4,7 @@ import math
 from cupy import asnumpy
 from torch.nn.functional import ctc_loss, softmax
 from Model.backpropagation import backpropagation
-from neural_network_layers import convolution_neurons
+from neural_network_layers import convolution_neurons, linear_neurons
 from Model.parameters_initalization import transformer_parameters_initializer
 from Model.configurations import NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE, NUM_LAYERS
 
@@ -13,6 +13,8 @@ def transformer_model(network_feature_size, conv_depth, patch_window, patches_ra
     convolution_parameters = transformer_parameters['conv_parameters']
     mha_parameters = transformer_parameters['attn_parameters']
     encoder_mlp_parameters = transformer_parameters['enc_mlp_parameters']
+    mlp_parameters = transformer_parameters['mlp_parameters']
+    output_parameters = transformer_parameters['output_parameters']
 
     def convolution_layers(image_patches):
         activations = []
@@ -73,76 +75,23 @@ def transformer_model(network_feature_size, conv_depth, patch_window, patches_ra
             encoder_activations.append(asnumpy(encoder_input))
         return encoder_activations
 
-    def multi_layer_perceptron(encoder_output, parameters=None):
-        input_feature_size = encoder_output.shape[-1]
-        output_feature_size = input_feature_size*mlp_ratio
-        if parameters is None:
-            layer_1_axons, layer_1_dentrites = axons_and_dentrites_initialization(input_feature_size, output_feature_size)
-            layer_2_axons, layer_2_dentrites = axons_and_dentrites_initialization(output_feature_size, input_feature_size)
-        else:
-            layer_1_axons, layer_1_dentrites = parameters[0]
-            layer_2_axons, layer_2_dentrites = parameters[1]
-        layer_1_activations = cupy.matmul(encoder_output, layer_1_axons) + layer_1_dentrites
-        layer_2_activations = cupy.matmul(layer_1_activations, layer_2_axons) + layer_2_dentrites
-        mlp_activations = [asnumpy(layer_1_activations), asnumpy(layer_2_activations)]
-        mlp_parameters = [[asnumpy(layer_1_axons), asnumpy(layer_1_dentrites)], [asnumpy(layer_2_axons), asnumpy(layer_2_dentrites)]]
-        return layer_2_activations, mlp_activations, mlp_parameters
+    def multi_layer_perceptron(encoder_output):
+        mlp_activations = []
+        layer_input = encoder_output
+        for each in range(len(mlp_parameters)):
+            axons, dentrites = cupy.array(mlp_parameters[each][0]), cupy.array(mlp_parameters[each][1])
+            layer_input = cupy.matmul(layer_input, axons) + dentrites
+            mlp_activations.append(asnumpy(layer_input))
+        return mlp_activations
 
-    def model_output(mlp_output, parameters=None):
-        input_feature_size = mlp_output.shape[-1]
-        output_feature_size = number_of_classes
-        if parameters is None:
-            output_axons, output_dentrites = axons_and_dentrites_initialization(input_feature_size, output_feature_size)
-        else:
-            output_axons, output_dentrites = parameters
-        model_output = log_softmax(cupy.matmul(mlp_output, output_axons) + output_dentrites)
-        model_output_parameters = [asnumpy(output_axons), asnumpy(output_dentrites)]
-        return model_output, model_output_parameters
+    def model_output(mlp_output):
+        axons, dentrites = cupy.array(output_parameters[0]), cupy.array(output_parameters[1])
+        return cupy.matmul(mlp_output, axons) + dentrites
 
-    def model_forward(image_patches):
-        batch_size = image_patches.shape[0]
-        num_image_patches = image_patches.shape[1]
-        image_patches = image_patches.reshape(batch_size, num_image_patches, -1)
-        # Instead of using CNN feature extraction we use simple image embeddings for simplicity.
-        image_embeddings, embeddings_parameters = convolution_layers(image_patches)
-        encoder_output, encoder_activations, attention_activations, encoder_mlp_activations, encoder_parameters = encoder_forward(image_embeddings)
-        mlp_output, mlp_activations, mlp_parameters = multi_layer_perceptron(encoder_output)
-        model_prediction, output_layer_parameters = model_output(mlp_output)
-        return model_prediction, image_embeddings, encoder_activations, attention_activations, encoder_mlp_activations, mlp_activations, embeddings_parameters, encoder_parameters, mlp_parameters, output_layer_parameters
+    def model_forward(image_embeddings):
+        encoder_activations = encoder_forward(image_embeddings)
+        mlp_activations = multi_layer_perceptron(cupy.array(encoder_activations[-1]))
+        output_activation = model_output(cupy.array(mlp_activations[-1]))
+        return output_activation
 
-    def calculate_network_stress(model_prediction, expected_prediction):
-        # Use TORCH for calculation loss
-        batch_size = model_prediction.shape[0]
-        num_image_patches = model_prediction.shape[1]
-        idx_prediction = model_prediction.shape[-1]
-        # num patches | batch | number of classes
-        model_prediction = torch.tensor(model_prediction.reshape(num_image_patches, batch_size, idx_prediction), device='cuda', requires_grad=True)
-        expected_prediction = torch.tensor(expected_prediction, device='cuda')
-        image_patches_length = torch.full(size=(batch_size,), fill_value=num_image_patches, dtype=torch.long)
-        word_token_length = unpadded_length_tokens(expected_prediction)
-        model_loss = ctc_loss(model_prediction, expected_prediction, image_patches_length, word_token_length)
-        # get the model prediction gradients
-        model_loss.backward()
-        last_layer_stress = cupy.array(model_prediction.grad)
-        return cupy.array(model_loss.item()), last_layer_stress
-
-    def update_network_parameters(): pass
-    #TODO: Create a function for updating parameters
-
-    def training_model(training_loader):
-        for batched_image_patch, expected_word in training_loader:
-            batched_image_patch = cupy.array(batched_image_patch)
-            expected_word = cupy.array(expected_word)
-            model_outputs = model_forward(batched_image_patch)
-            model_prediction = model_outputs[0]
-            # model activations
-            image_embeddings, encoder_activations, attention_activation, encoder_mlp_activations, mlp_activations = model_outputs[1:-4]
-            # model parameters
-            image_embeddings_parameters, encoder_parameters, mlp_parameters, output_layer_parameters = model_outputs[6:]
-            # Calculate network stress
-            network_stress, last_layer_stress = calculate_network_stress(model_prediction, expected_word)
-            mlp_stress, encoder_stress, embeddings_stress = backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, encoder_parameters, image_embeddings_parameters)
-            # Update network parameters
-            # update_network_parameters(image_embeddings_parameters, encoder_parameters, mlp_parametesr, output_layer_parameters)
-    
-    return encoder_forward
+    return model_forward
