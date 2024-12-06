@@ -104,8 +104,7 @@ class MultiHeadAttention(nn.Module):
         input_embeddings_context = input_embeddings_context.permute(0, 2, 1, 3).contiguous()
         # batch | patches | total attention feature size
         attention_output_shape = input_embeddings_context.shape[:-2] + (self.total_attention_feature_size,)
-        attention_output = self.attn_output_layer(input_embeddings_context.view(attention_output_shape))
-        return attention_output
+        return input_embeddings_context.view(attention_output_shape)
 
 class EncoderMultiLayerPerceptron(nn.Module):
     def __init__(self):
@@ -144,7 +143,8 @@ class EncoderLayer(nn.Module):
 
     def forward(self, input_embeddings: torch.Tensor):
         layer_output = input_embeddings
-        for layer in self.encoder_layers: layer_output = layer(layer_output)
+        for layer in self.encoder_layers:
+            layer_output = layer(layer_output)
         return layer_output
 
 class MultiLayerPerceptron(nn.Module):
