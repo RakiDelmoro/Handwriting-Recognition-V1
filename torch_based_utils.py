@@ -16,7 +16,7 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
             stress = model.get_stress_and_update_parameters(model_prediction, expected_array, optimizer, learning_rate)
             per_batch_stress.append(stress.item())
         return cupy.mean(cupy.array(per_batch_stress))
-    
+
     def batch_calculate_str_distance(model_prediction_in_batch, expected_prediction_in_batch):
         similarities_corresponding_model_and_expected_str = []
         batch_iterator = model_prediction_in_batch.shape[0]
@@ -41,7 +41,7 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
             # Batch calculate str distance return tuple: str similarites, model_and_expected_as_str
             batch_similarities = batch_calculate_str_distance(model_prediction, expected_array)
             per_batch_str_similarities.extend(batch_similarities)
-        
+
         list_of_similarities = [similarity for each_dict in per_batch_str_similarities for similarity in each_dict.keys()]
         highest_similarities = sorted(list_of_similarities, reverse=True)[:5]
         lowest_similarties = sorted(list_of_similarities)[:5]
