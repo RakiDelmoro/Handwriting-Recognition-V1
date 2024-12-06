@@ -23,5 +23,4 @@ CHARS = ["\x00", PAD_TOKEN, START_TOKEN, END_TOKEN] + SYMBOLS + [" "] + LETTERS 
 int_to_printable = [get_printable(c) for _, c in enumerate(CHARS)]
 char_to_index = {c:i for i, c in enumerate(CHARS)}
 characters_to_ints = lambda text: [char_to_index[c] for c in text]
-ints_to_characters = lambda tensor: "".join([int_to_printable[int(each_token)]
-                                           for each_token in takewhile(lambda x: x != char_to_index[PAD_TOKEN], tensor)])
+ints_to_characters = lambda tensor: "".join([int_to_printable[int(each_token)] for each_token in takewhile(lambda x: x != char_to_index[PAD_TOKEN], tensor)])
