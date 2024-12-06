@@ -6,7 +6,7 @@ from torch.nn.functional import ctc_loss, softmax
 from Model.backpropagation import backpropagation
 from neural_network_layers import convolution_neurons
 from Model.parameters_initalization import transformer_parameters_initializer
-from Model.configurations import NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE
+from Model.configurations import NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE, NUM_LAYERS
 
 def transformer_model(network_feature_size, conv_depth, patch_window, patches_ratio, mlp_depth, mlp_ratio, number_of_classes):
     transformer_parameters = transformer_parameters_initializer(network_feature_size, conv_depth, patch_window, patches_ratio, mlp_depth, mlp_ratio, output_class=number_of_classes)
@@ -45,47 +45,33 @@ def transformer_model(network_feature_size, conv_depth, patch_window, patches_ra
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
         return attention_output, attention_axons
 
-    def encoder_mlp(attention_output, parameters=None):
+    def encoder_mlp(attention_output):
+        activations = []
         input_for_layer = attention_output
-        input_feature_size = attention_output.shape[-1]
-        output_feature_size = input_feature_size*mlp_ratio
-        if parameters is None:
-            layer_1_axons, layer_1_dentrites = axons_and_dentrites_initialization(input_feature_size, output_feature_size)
-            layer_2_axons, layer_2_dentrites = axons_and_dentrites_initialization(output_feature_size, input_feature_size)
-        else:
-            layer_1_axons, layer_1_dentrites = parameters[0]
-            layer_2_axons, layer_2_dentrites = parameters[1]
-        layer_1_activations = cupy.matmul(attention_output, layer_1_axons) + layer_1_dentrites
-        layer_2_activations = cupy.matmul(layer_1_activations, layer_2_axons) + layer_2_dentrites
-        mlp_activations = [asnumpy(input_for_layer), asnumpy(layer_1_activations), asnumpy(layer_2_activations)]
-        mlp_parameters = [[asnumpy(layer_1_axons), asnumpy(layer_1_dentrites)], [asnumpy(layer_2_axons), asnumpy(layer_2_dentrites)]]
-        return layer_2_activations, mlp_activations, mlp_parameters
+        for each in range(len(encoder_mlp_parameters)):
+            axons, dentrites = cupy.array(encoder_mlp_parameters[each][0]), cupy.array(encoder_mlp_parameters[each][1])
+            input_for_layer = cupy.matmul(input_for_layer, axons) + dentrites
+            activations.append(asnumpy(input_for_layer))
+        return activations
 
-    def encoder_layer(image_embeddings, attention_parameters=None, mlp_parameters=None):
+    def encoder_layer(image_embeddings):
         # Multi-Head-Attention
-        attention_output, attention_activations, attn_parameters = multi_head_attention(image_embeddings, attention_parameters)
+        attention_output, attention_axons = multi_head_attention(image_embeddings)
         # Residual connection from image embeddings to attention output
         attention_residual_connection = attention_output + image_embeddings
         # Multi-Layer-Perceptron
-        mlp_output, mlp_activations, mlp_params = encoder_mlp(attention_residual_connection, mlp_parameters)
+        mlp_activations = encoder_mlp(attention_residual_connection)
         # Residual connection from attention residual connection to mlp output
-        mlp_residual_connection = mlp_output + attention_residual_connection # Second residual connection
-        encoder_layer_activations = [asnumpy(attention_residual_connection), asnumpy(mlp_residual_connection)]
-        return mlp_residual_connection, encoder_layer_activations, attention_activations, mlp_activations, attn_parameters, mlp_params
+        mlp_residual_connection = cupy.array(mlp_activations[-1]) + attention_residual_connection # Second residual connection
+        return mlp_residual_connection
 
     def encoder_forward(image_embeddings):
-        attention_activation_inside_layers = []
-        mlp_activation_inside_layers = []
         encoder_activations = []
-        encoder_parameters = []
         encoder_input = image_embeddings
-        for _ in range(num_layers):
-            encoder_input, encoder_layer_activation, attention_activations, mlp_activations, attn_params, mlp_params = encoder_layer(encoder_input)
-            encoder_activations.append(encoder_layer_activation)
-            attention_activation_inside_layers.append(attention_activations)
-            mlp_activation_inside_layers.append(mlp_activations)
-            encoder_parameters.append([attn_params, mlp_params])
-        return encoder_input, encoder_activations, attention_activation_inside_layers, mlp_activation_inside_layers, encoder_parameters
+        for _ in range(NUM_LAYERS):
+            encoder_input = encoder_layer(encoder_input)
+            encoder_activations.append(asnumpy(encoder_input))
+        return encoder_activations
 
     def multi_layer_perceptron(encoder_output, parameters=None):
         input_feature_size = encoder_output.shape[-1]
@@ -159,4 +145,4 @@ def transformer_model(network_feature_size, conv_depth, patch_window, patches_ra
             # Update network parameters
             # update_network_parameters(image_embeddings_parameters, encoder_parameters, mlp_parametesr, output_layer_parameters)
     
-    return multi_head_attention
+    return encoder_forward
