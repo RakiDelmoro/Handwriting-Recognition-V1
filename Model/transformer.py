@@ -2,58 +2,48 @@ import cupy
 import torch
 import math
 from cupy import asnumpy
-from torch.nn.functional import ctc_loss
+from torch.nn.functional import ctc_loss, softmax
 from Model.backpropagation import backpropagation
-from Model.utils import axons_and_dentrites_initialization, softmax, unpadded_length_tokens, log_softmax
+from neural_network_layers import convolution_neurons
+from Model.parameters_initalization import transformer_parameters_initializer
+from Model.configurations import NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE
 
-def transformer_model(network_feature_size, num_attn_heads, num_layers, attention_feature_size, mlp_ratio, number_of_classes, padding_token):
-    def image_patches_embeddings(image_patches, parameters=None):
-        batch_size = image_patches.shape[0]
-        num_patches = image_patches.shape[1]
-        input_feature = image_patches.shape[-1]
-        output_feature = network_feature_size
-        if parameters is None: axons, dentrites = axons_and_dentrites_initialization(input_feature, output_feature)
-        else: axons, dentrites = parameters
-        # This array is to provide information of image patches position. Unlike RNN which process data sequentially. Transformer work on all tokens/patches simultaneuously.
-        trainable_positional_embedding = cupy.zeros([batch_size, num_patches, output_feature])
-        image_projection = cupy.matmul(image_patches, axons) + dentrites
-        image_embeddings = image_projection + trainable_positional_embedding
-        image_embeddings_params = [asnumpy(axons), asnumpy(dentrites)]
-        # batch size | patches | image patched feature size
-        return image_embeddings, image_embeddings_params
+def transformer_model(network_feature_size, conv_depth, patch_window, patches_ratio, mlp_depth, mlp_ratio, number_of_classes):
+    transformer_parameters = transformer_parameters_initializer(network_feature_size, conv_depth, patch_window, patches_ratio, mlp_depth, mlp_ratio, output_class=number_of_classes)
+    convolution_parameters = transformer_parameters['conv_parameters']
+    mha_parameters = transformer_parameters['attn_parameters']
+    encoder_mlp_parameters = transformer_parameters['enc_mlp_parameters']
 
-    def multi_head_attention(image_embeddings, parameters=None):
+    def convolution_layers(image_patches):
+        activations = []
+        layer_output = image_patches
+        for each in range(len(convolution_parameters)):
+            axons, dentrites = cupy.array(convolution_parameters[each][0]), cupy.array(convolution_parameters[each][1])
+            layer_output = convolution_neurons(image_patches, axons, dentrites, step_of_patch_window=1)
+            activations.append(asnumpy(layer_output))
+        return activations
+    
+    #TODO: Maxpoold2d a function that downsample the image size and still retain important information
+
+    def multi_head_attention(image_embeddings):
         batch_size = image_embeddings.shape[0]
         num_tokens = image_embeddings.shape[1]
-        total_attn_feature_size = num_attn_heads * attention_feature_size
-        if parameters is None: 
-            axons_for_query, dentrites_for_query = axons_and_dentrites_initialization(network_feature_size, total_attn_feature_size)
-            axons_for_key, dentrites_for_key = axons_and_dentrites_initialization(network_feature_size, total_attn_feature_size)
-            axons_for_value, dentrites_for_value = axons_and_dentrites_initialization(network_feature_size, total_attn_feature_size)
-            output_attention_axons, output_attnetion_dentrites = axons_and_dentrites_initialization(total_attn_feature_size, network_feature_size)
-        else:
-            axons_for_query, dentrites_for_query = parameters[0]
-            axons_for_key, dentrites_for_key = parameters[1]
-            axons_for_value, dentrites_for_value = parameters[2]
-            output_attention_axons, output_attnetion_dentrites = parameters[3]
-        # batch | attention heads | patches | attention feature size
-        image_embeddings_query = (cupy.matmul(image_embeddings, axons_for_query) + dentrites_for_query).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
-        image_embeddings_key = (cupy.matmul(image_embeddings, axons_for_key) + dentrites_for_key).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
-        image_embeddings_value = (cupy.matmul(image_embeddings, axons_for_value) + dentrites_for_value).reshape(batch_size, num_attn_heads, num_tokens, attention_feature_size)
+        total_attn_feature_size = NUM_ATTENTION_HEADS * ATTENTION_FEATURE_SIZE
+        image_projections = []
+        for each in range(len(mha_parameters)):
+            axons, dentrites = cupy.array(mha_parameters[each][0]), cupy.array(mha_parameters[each][1])
+            projection = (cupy.matmul(image_embeddings, axons) + dentrites).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+            image_projections.append(projection)
+
         # attention scores -> batch | attention heads | patches | patches
-        attention_scores = (cupy.matmul(image_embeddings_query, image_embeddings_key.transpose(0, 1, 3, 2))) / math.sqrt(attention_feature_size)
+        attention_scores = (cupy.matmul(image_projections[0], image_projections[1].transpose(0, 1, 3, 2))) / math.sqrt(ATTENTION_FEATURE_SIZE)
         # attention scores as probabilities
-        attention_axons = softmax(attention_scores)
+        attention_axons = cupy.array(softmax(torch.tensor(attention_scores), dim=-1))
         # image_patches_context -> batch | patches | attention heads | attention feature size
-        image_patches_context = cupy.matmul(attention_axons, image_embeddings_value).reshape(batch_size, num_tokens, num_attn_heads, attention_feature_size)
+        image_patches_context = cupy.matmul(attention_axons, image_projections[2]).reshape(batch_size, num_tokens, NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE)
         # batch | patches | attention heads * attention feature size
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
-        # batch | patches | network feature size
-        attention_output = cupy.matmul(attention_output, output_attention_axons) + output_attnetion_dentrites
-
-        attention_activations = [asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value)]
-        attention_parameters = [[asnumpy(axons_for_query), asnumpy(dentrites_for_query)], [asnumpy(axons_for_key), asnumpy(dentrites_for_key)], [asnumpy(axons_for_value), asnumpy(dentrites_for_value)], asnumpy(image_embeddings_query), asnumpy(image_embeddings_key), asnumpy(image_embeddings_value), asnumpy(attention_axons), [asnumpy(output_attention_axons), asnumpy(output_attnetion_dentrites)]]
-        return attention_output, attention_activations, attention_parameters
+        return attention_output, attention_axons
 
     def encoder_mlp(attention_output, parameters=None):
         input_for_layer = attention_output
@@ -128,7 +118,7 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
         num_image_patches = image_patches.shape[1]
         image_patches = image_patches.reshape(batch_size, num_image_patches, -1)
         # Instead of using CNN feature extraction we use simple image embeddings for simplicity.
-        image_embeddings, embeddings_parameters = image_patches_embeddings(image_patches)
+        image_embeddings, embeddings_parameters = convolution_layers(image_patches)
         encoder_output, encoder_activations, attention_activations, encoder_mlp_activations, encoder_parameters = encoder_forward(image_embeddings)
         mlp_output, mlp_activations, mlp_parameters = multi_layer_perceptron(encoder_output)
         model_prediction, output_layer_parameters = model_output(mlp_output)
@@ -168,4 +158,5 @@ def transformer_model(network_feature_size, num_attn_heads, num_layers, attentio
             mlp_stress, encoder_stress, embeddings_stress = backpropagation(last_layer_stress, output_layer_parameters, mlp_parameters, encoder_parameters, image_embeddings_parameters)
             # Update network parameters
             # update_network_parameters(image_embeddings_parameters, encoder_parameters, mlp_parametesr, output_layer_parameters)
-    return training_model
+    
+    return multi_head_attention
