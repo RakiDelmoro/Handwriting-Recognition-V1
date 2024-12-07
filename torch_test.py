@@ -7,7 +7,7 @@ from torch_model.transformer import Transformer
 from torch_based_utils import torch_model_runner
 
 def runner():
-    EPOCHS = 50
+    EPOCHS = 10000
     BATCH_SIZE = 64
     LEARNING_RATE = 0.001
     MODEL = Transformer()
@@ -16,7 +16,7 @@ def runner():
     TRAINING_DATASET, VALIDATION_DATASET = split_data(dataset=DATASET, ratio=0.8)
     TRAINING_LOADER = DataLoader(dataset=TRAINING_DATASET, batch_size=BATCH_SIZE, shuffle=True)
     VALIDATION_LOADER = DataLoader(dataset=VALIDATION_DATASET, batch_size=BATCH_SIZE, shuffle=True)
-    # TRAINING_LOADER = [[torch.randn(BATCH_SIZE, 1, IMAGE_SIZE[0], IMAGE_SIZE[1]), torch.randint(low=0, high=83, size=(BATCH_SIZE, 33))]] # Test samples
+    # TRAINING_LOADER = [[torch.randn(BATCH_SIZE, 1, IMAGE_SIZE[0], IMAGE_SIZE[1]), torch.randint(low=0, high=83, size=(BATCH_SIZE, 22))]] # Test samples
     torch_model_runner(model=MODEL, training_loader=TRAINING_LOADER, validation_loader=VALIDATION_LOADER, optimizer=OPTIMIZER, learning_rate=LEARNING_RATE, epochs=EPOCHS)
 
 runner()
