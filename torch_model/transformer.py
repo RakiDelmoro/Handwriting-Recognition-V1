@@ -182,7 +182,7 @@ class Transformer(nn.Module):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        return loss
+        return loss, optimizer.state_dict()
 
     def prediction_as_indices(self, model_prediction):
         model_prediction_as_probabilities = torch.nn.Softmax(dim=-1).forward(model_prediction)
