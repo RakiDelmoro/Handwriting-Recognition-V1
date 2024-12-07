@@ -1,4 +1,5 @@
 import cupy
+import torch
 import Levenshtein
 from tqdm import tqdm
 from datasets.utils import ints_to_characters
@@ -13,9 +14,9 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
             image_array = image_array.to(DEVICE)
             expected_array = expected_array.to(DEVICE)
             model_prediction = model.forward(image_array)
-            stress = model.get_stress_and_update_parameters(model_prediction, expected_array, optimizer, learning_rate)
+            stress, optim_state = model.get_stress_and_update_parameters(model_prediction, expected_array, optimizer, learning_rate)
             per_batch_stress.append(stress.item())
-        return cupy.mean(cupy.array(per_batch_stress))
+        return cupy.mean(cupy.array(per_batch_stress)), optim_state
 
     def batch_calculate_str_distance(model_prediction_in_batch, expected_prediction_in_batch):
         similarities_corresponding_model_and_expected_str = []
@@ -41,11 +42,9 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
             # Batch calculate str distance return tuple: str similarites, model_and_expected_as_str
             batch_similarities = batch_calculate_str_distance(model_prediction, expected_array)
             per_batch_str_similarities.extend(batch_similarities)
-
         list_of_similarities = [similarity for each_dict in per_batch_str_similarities for similarity in each_dict.keys()]
         highest_similarities = sorted(list_of_similarities, reverse=True)[:5]
         lowest_similarties = sorted(list_of_similarities)[:5]
-
         low_similarities_counter = 0
         for each in per_batch_str_similarities:
             string_distance, model_and_expected_str = next(iter(each.items()))
@@ -61,7 +60,23 @@ def torch_model_runner(model, training_loader, validation_loader, optimizer, lea
                 highest_similarities_counter += 1
             if highest_similarities_counter >= len(highest_similarities): break
 
+    def save_model_weights(epoch, model_stress, optim_state):
+        torch.save({'epoch': epoch,
+                    'model state': model.state_dict(),
+                    'optimizer state': optim_state,
+                    'loss': model_stress}, 'model.pt')
+        print('Saved checkpoint!')
+
+    def load_model_weights():
+        checkpoint = torch.load('model.pt')
+        model.load_state_dict(checkpoint['model state'])
+        optimizer.load_state_dict(checkpoint['optimizer state'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        print(f'Model path: model.pt epoch: {epoch} loss: {loss}')
+
     for each in range(epochs):
-        average_stress = training()
+        average_stress, optim_state = training()
         validation()
+        save_model_weights(each+1, average_stress, optim_state)
         print(f'EPOCH: {each+1} LOSS: {average_stress}')
