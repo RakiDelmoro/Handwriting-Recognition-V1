@@ -5,17 +5,22 @@ from tqdm import tqdm
 from features import GREEN, RED, RESET
 from datasets.utils import ints_to_characters
 from Model.utils import cross_entropy_loss
-from Model.configurations import DEVICE
+from Model.backpropagation import backpropagation
+from Model.configurations import DEVICE, NETWORK_FEATURE_SIZE, MLP_RATIO, NUMBER_OF_CLASSES, MLP_DEPTH
+from Model.parameters_initalization import transformer_parameters_initializer
 
 def model_runner(model, training_loader, validation_loader, optimizer, learning_rate, epochs):
+    transformer_parameters = transformer_parameters_initializer(NETWORK_FEATURE_SIZE, MLP_DEPTH, MLP_RATIO, 10)
+
     def training():
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
-            model_prediction = model(image_array)
+            model_prediction = model(transformer_parameters)(image_array)
             stress, layer_stress = cross_entropy_loss(model_prediction, expected_array)
+            backpropagation(layer_stress, transformer_parameters)
             per_batch_stress.append(stress.item())
-        return cupy.mean(cupy.array(per_batch_stress)), optim_state
+        return cupy.mean(cupy.array(per_batch_stress))
 
     def validation():
         per_batch_accuracy = []
@@ -63,8 +68,7 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         print(f'Model path: model.pt epoch: {epoch} loss: {loss}')
 
     for each in range(epochs):
-        average_stress, optim_state = training()
+        average_stress = training()
         accuracy = validation()
-        save_model_weights(each+1, average_stress, optim_state)
         print(f'EPOCH: {each+1} LOSS: {average_stress} ACCURACY: {accuracy}')
     
