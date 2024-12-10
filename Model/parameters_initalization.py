@@ -1,6 +1,8 @@
 import math
+import cupy
 import torch
 import numpy as np
+from Model.configurations import IMAGE_SIZE, PATCH_SIZE, BATCH_SIZE
 
 def linear_initialization(input_feature, output_feature):
     weights = torch.empty((input_feature, output_feature))
@@ -20,18 +22,20 @@ def convolution_initialization(input_feature, output_feature):
     torch.nn.init.uniform_(bias, -bound, bound)
     return np.array(weights), np.array(bias)
 
-def transformer_parameters_initializer(network_feature_size, conv_depth, patch_window_size, img_patches_magnitude, mlp_depth, mlp_ratio, output_class):
+def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_ratio, output_class):
     transformer_parameters = {}
 
-    def conv_layer_parameters():
-        parameters = []
-        input_channel = 1
-        for each in range(1, conv_depth+1):
-            output_channel = each * img_patches_magnitude
-            conv_parameter = convolution_initialization((output_channel, input_channel, patch_window_size[0], patch_window_size[1]), output_channel)
-            parameters.append(conv_parameter)
-            input_channel = output_channel
-        transformer_parameters['conv_parameters'] = parameters
+    def image_embeddings_parameters():
+        image_h, image_w = IMAGE_SIZE
+        patch_h, patch_w = PATCH_SIZE
+        num_patches = (image_h // patch_h) * (image_w // patch_w)
+        patch_feature_size = patch_h * patch_w
+        patches_neurons = linear_initialization(patch_feature_size, network_feature_size)
+        classification_token_parameters = np.zeros((BATCH_SIZE, 1, network_feature_size))
+        distillation_token_parameters = np.zeros((BATCH_SIZE, 1, network_feature_size))
+        position_embeddings_parameters = np.zeros((BATCH_SIZE, num_patches+2, network_feature_size))
+        parameters = [patches_neurons, classification_token_parameters, distillation_token_parameters, position_embeddings_parameters]
+        transformer_parameters['image_embeddings_parameters'] = parameters
 
     def attention_layer_parameters():
         parameters = []
@@ -69,7 +73,7 @@ def transformer_parameters_initializer(network_feature_size, conv_depth, patch_w
        parameters = linear_initialization(network_feature_size, output_class)
        transformer_parameters['output_parameters'] = parameters
     # Transformer architecture ordered parameters
-    conv_layer_parameters()
+    image_embeddings_parameters()
     attention_layer_parameters()
     encoder_mlp_layer_parameters()
     mlp_layer_parameters()
