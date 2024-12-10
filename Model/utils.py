@@ -61,6 +61,18 @@ def log_softmax(input_data):
     log_sum_exp = cupy.log(cupy.sum(exp_data, axis=-1, keepdims=True))
     return shifted_data - log_sum_exp
 
+def cross_entropy_loss(model_prediction, expected_indices):
+    batch_size = model_prediction.shape[0]
+    prediction_as_probabilities = softmax(model_prediction)
+    model_prediction = prediction_as_probabilities[:, 0, :]
+    correct_class_mask = cupy.zeros_like(model_prediction)
+    correct_class_mask[cupy.arange(batch_size), expected_indices] = 1.0
+    loss = cupy.mean(-cupy.sum(correct_class_mask * cupy.log(model_prediction), axis=1))
+    
+    layer_stress = prediction_as_probabilities.copy()
+    layer_stress[cupy.arange(batch_size), 0, expected_indices] -= 1.0
+    return loss, layer_stress
+
 def generate_square_mask(size):
     mask = (cupy.triu(cupy.ones((size, size))) == 1)
     mask = mask.astype(float)
