@@ -7,7 +7,7 @@ from Model.utils import softmax
 def cupy_array(x):
     return cupy.round(cupy.array(x, dtype=cupy.float32), 4)
 
-def linear_neurons(input_neurons, axons, dentrites, activation_function=None, return_parameters=False):
+def neurons_activations(input_neurons, axons, dentrites, activation_function=None, return_parameters=False):
     if return_parameters:
         if activation_function is None:
             return cupy.matmul(input_neurons, axons, dtype=cupy.float32) + dentrites, axons, dentrites
@@ -49,9 +49,9 @@ def attention_mechanism_neurons(input_neurons, num_attn_heads, attn_head_feature
         input_data = input_data.reshape(new_input_data_shape)
         return input_data.transpose(0, 2, 1, 3)
     # batch | attn_heads | patches | attention feature size
-    linear_1_projection = apply_attn_heads_dim(linear_neurons(input_neurons, axons=layer_1_connections[0], dentrites=layer_1_connections[1]))
-    linear_2_projection = apply_attn_heads_dim(linear_neurons(input_neurons, axons=layer_2_connections[0], dentrites=layer_2_connections[1]))
-    linear_3_projection = apply_attn_heads_dim(linear_neurons(input_neurons, axons=layer_3_connections[0], dentrites=layer_3_connections[1]))
+    linear_1_projection = apply_attn_heads_dim(neurons_activations(input_neurons, axons=layer_1_connections[0], dentrites=layer_1_connections[1]))
+    linear_2_projection = apply_attn_heads_dim(neurons_activations(input_neurons, axons=layer_2_connections[0], dentrites=layer_2_connections[1]))
+    linear_3_projection = apply_attn_heads_dim(neurons_activations(input_neurons, axons=layer_3_connections[0], dentrites=layer_3_connections[1]))
     raw_attention_scores = (cupy.matmul(linear_1_projection, linear_2_projection.transpose(0, 1, 3, 2))) / math.sqrt(num_attn_heads*attn_head_feature_size)
     attention_axons = cupy.array(torch.nn.functional.softmax(torch.tensor(raw_attention_scores, dtype=torch.float32), dim=-1))
     # batch | attention heads | patches | attention feature size
