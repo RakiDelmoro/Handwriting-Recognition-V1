@@ -15,7 +15,7 @@ def runner():
     OPTIMIZER = torch.optim.AdamW
     TRANSFORM = lambda x: transforms.ToTensor()(x).reshape(IMAGE_HEIGHT, IMAGE_WIDTH).type(dtype=torch.float32)
     TARGET_TRANSFORM = lambda x: torch.tensor(x, dtype=torch.int64)
-    model = transformer_model(NETWORK_FEATURE_SIZE, MLP_RATIO, MLP_RATIO, NUMBER_OF_CLASSES)
+    model = transformer_model
 
     training_dataset = datasets.MNIST('./training-data', download=True, train=True, transform=TRANSFORM, target_transform=TARGET_TRANSFORM)
     validation_dataset = datasets.MNIST('./training-data', download=True, train=False, transform=TRANSFORM, target_transform=TARGET_TRANSFORM)
