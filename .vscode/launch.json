@@ -17,6 +17,13 @@
             "request": "launch",
             "program": "./test.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: Custom Model runner",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./custom_model_runner.py",
+            "console": "integratedTerminal"
         }
     ]
 }
