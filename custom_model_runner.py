@@ -3,11 +3,10 @@ from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 from Model.transformer import transformer_model
-from Model.configurations import NETWORK_FEATURE_SIZE, MLP_RATIO
+from Model.configurations import NETWORK_FEATURE_SIZE, MLP_RATIO, BATCH_SIZE
 from custom_mnist_data import model_runner
 def runner():
     EPOCHS = 100
-    BATCH_SIZE = 512
     IMAGE_WIDTH = 28
     IMAGE_HEIGHT = 28
     LEARNING_RATE = 0.001
