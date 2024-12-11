@@ -6,6 +6,7 @@ from features import GREEN, RED, RESET
 from datasets.utils import ints_to_characters
 from Model.utils import cross_entropy_loss
 from Model.backpropagation import backpropagation
+from Model.update_parameters import update_model_parameters
 from Model.configurations import DEVICE, NETWORK_FEATURE_SIZE, MLP_RATIO, NUMBER_OF_CLASSES, MLP_DEPTH
 from Model.parameters_initalization import transformer_parameters_initializer
 
@@ -16,9 +17,11 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
-            model_prediction = model(transformer_parameters)(image_array)
+            model_prediction, model_activations, attention_projections, attentions_axons = model(transformer_parameters)(image_array)
             stress, layer_stress = cross_entropy_loss(model_prediction, expected_array)
-            backpropagation(layer_stress, transformer_parameters)
+            model_layers_stresses = backpropagation(layer_stress, attention_projections, attentions_axons, transformer_parameters)
+            update_parameters = update_model_parameters(learning_rate, transformer_parameters, model_activations, model_layers_stresses)
+            transformer_parameters = update_parameters
             per_batch_stress.append(stress.item())
         return cupy.mean(cupy.array(per_batch_stress))
 
@@ -51,21 +54,6 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         print(f"{RED}Model Wrong Predictions{RESET}")
         for indices in wrong_samples: print(f"Digit Image is: {RED}{model_expected_prediction[indices].item()}{RESET} Model Predictions: {RED}{model_prediction[indices].item()}{RESET}")
         return model_accuracy
-
-    def save_model_weights(epoch, model_stress, optim_state):
-        torch.save({'epoch': epoch,
-                    'model state': model.state_dict(),
-                    'optimizer state': optim_state,
-                    'loss': model_stress}, 'model.pt')
-        print('Saved checkpoint!')
-
-    def load_model_weights():
-        checkpoint = torch.load('model.pt')
-        model.load_state_dict(checkpoint['model state'])
-        optimizer.load_state_dict(checkpoint['optimizer state'])
-        epoch = checkpoint['epoch']
-        loss = checkpoint['loss']
-        print(f'Model path: model.pt epoch: {epoch} loss: {loss}')
 
     for each in range(epochs):
         average_stress = training()
