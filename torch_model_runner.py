@@ -5,8 +5,8 @@ from torchvision import transforms, datasets
 from torch_model.transformer_patches import Transformer
 from torch_based_mnist_utils import model_runner
 def runner():
-    EPOCHS = 100
-    BATCH_SIZE = 512
+    EPOCHS = 50
+    BATCH_SIZE = 1024
     IMAGE_WIDTH = 28
     IMAGE_HEIGHT = 28
     LEARNING_RATE = 0.001
