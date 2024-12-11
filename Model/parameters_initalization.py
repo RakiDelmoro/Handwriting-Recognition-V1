@@ -2,7 +2,7 @@ import math
 import cupy
 import torch
 import numpy as np
-from Model.configurations import IMAGE_SIZE, PATCH_SIZE, BATCH_SIZE
+from Model.configurations import IMAGE_SIZE, PATCH_SIZE, BATCH_SIZE, NUM_LAYERS
 
 def linear_initialization(input_feature, output_feature):
     weights = torch.empty((input_feature, output_feature))
@@ -43,7 +43,7 @@ def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_rati
         for _ in range(3):
             projection_parameters = linear_initialization(network_feature_size, network_feature_size)
             parameters.append(projection_parameters)
-        transformer_parameters['attn_parameters'] = parameters
+        return parameters
 
     def encoder_mlp_layer_parameters():
         parameters = []
@@ -55,7 +55,17 @@ def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_rati
             layer_parameters = linear_initialization(input_feature, output_feature)
             input_feature = output_feature
             parameters.append(layer_parameters)
-        transformer_parameters['enc_mlp_parameters'] = parameters
+        return parameters 
+
+    def transformer_encoder_parameters():
+        mha_parameters = []
+        encoder_mlp_parameters = []
+        for _ in range(NUM_LAYERS):
+            attention_parameters = attention_layer_parameters()
+            mlp_parameters = encoder_mlp_layer_parameters()
+            mha_parameters.append(attention_parameters)
+            encoder_mlp_parameters.append(mlp_parameters)
+        transformer_parameters['encoder_parameters'] = [mha_parameters, encoder_mlp_parameters]
 
     def mlp_layer_parameters():
         parameters = []
@@ -74,8 +84,7 @@ def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_rati
        transformer_parameters['output_parameters'] = parameters
     # Transformer architecture ordered parameters
     image_embeddings_parameters()
-    attention_layer_parameters()
-    encoder_mlp_layer_parameters()
+    transformer_encoder_parameters()
     mlp_layer_parameters()
     output_layer_parameters()
     return transformer_parameters
