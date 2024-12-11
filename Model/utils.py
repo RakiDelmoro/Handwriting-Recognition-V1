@@ -39,18 +39,11 @@ def axons_and_dentrites_initialization(input_feature, output_feature):
     torch.nn.init.uniform_(bias, -bound, bound)
     return cupy.array(weights), cupy.array(bias)
 
-def softmax(input_data, layer_stress=None, return_derivative=False):
-    # Subtract max value for numerical stability
-    shifted_data = input_data - cupy.max(input_data, axis=-1, keepdims=True)
-    # Calculate exp
-    exp_data = cupy.exp(shifted_data)
-    # Sum along axis=1 and keep dimensions for broadcasting
-    sum_exp_data = cupy.sum(exp_data, axis=-1, keepdims=True)
-    if return_derivative:
-        dot_product = np.dot(input_data, layer_stress)
-        return input_data * (layer_stress - dot_product)
-    else:
-        return exp_data / sum_exp_data
+def softmax(input_data):
+    shifted_data = input_data - cupy.max(input_data, axis=-1, keepdims=True) # Subtract max value for numerical stability
+    exp_data = cupy.exp(shifted_data) # Calculate exp
+    sum_exp_data = cupy.sum(exp_data, axis=-1, keepdims=True) # Sum along axis=1 and keep dimensions for broadcasting
+    return exp_data / sum_exp_data
 
 def log_softmax(input_data):
     # Subtract max value for numerical stability
