@@ -20,12 +20,12 @@ def transformer_model(transformer_parameters):
     transformer_model_activations = {}
 
     def image_embeddings(batched_image):
-        axons, dentrites = cupy.array(image_embeddings_parameters[0][0]), cupy.array(image_embeddings_parameters[0][1])
-        cls_tokens = cupy.array(image_embeddings_parameters[1])
-        dstl_tokens = cupy.array(image_embeddings_parameters[2])
-        position_embeddings = cupy.array(image_embeddings_parameters[3])
+        axons, dentrites = image_embeddings_parameters[0][0], image_embeddings_parameters[0][1]
+        cls_tokens = image_embeddings_parameters[1]
+        dstl_tokens = image_embeddings_parameters[2]
+        position_embeddings = image_embeddings_parameters[3]
 
-        batched_patch_image = cupy.array(rearrange(np.array(batched_image), 'b (h p1) (w p2) -> b (h w) (p1 p2)', p1=PATCH_SIZE[0], p2=PATCH_SIZE[1]))
+        batched_patch_image = cupy.array(rearrange(batched_image), 'b (h p1) (w p2) -> b (h w) (p1 p2)', p1=PATCH_SIZE[0], p2=PATCH_SIZE[1])
         patches_projection = cupy.matmul(batched_patch_image, axons) + dentrites
         patches_activations_with_special_tokens = cupy.concatenate((cls_tokens, patches_projection, dstl_tokens), axis=1)
         patches_activations = patches_activations_with_special_tokens + position_embeddings
