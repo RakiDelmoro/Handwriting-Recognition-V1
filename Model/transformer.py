@@ -38,7 +38,7 @@ def transformer_model(transformer_parameters):
         total_attn_feature_size = NUM_ATTENTION_HEADS * ATTENTION_FEATURE_SIZE
         image_projections = []
         for each in range(len(mha_parameters)):
-            axons, dentrites = cupy.array(mha_parameters[each][0]), cupy.array(mha_parameters[each][1])
+            axons, dentrites =mha_parameters[each][0], mha_parameters[each][1]
             projection = neurons_activations(image_embeddings, axons, dentrites).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
             image_projections.append(projection)
         # attention scores -> batch | attention heads | patches | patches
@@ -55,10 +55,10 @@ def transformer_model(transformer_parameters):
         encoder_mlp_activations = [attention_output]
         input_for_layer = attention_output
         for each in range(len(encoder_mlp_parameters)):
-            axons, dentrites = cupy.array(encoder_mlp_parameters[each][0]), cupy.array(encoder_mlp_parameters[each][1])
+            axons, dentrites =encoder_mlp_parameters[each][0], encoder_mlp_parameters[each][1]
             input_for_layer = cupy.matmul(input_for_layer, axons) + dentrites
             if each == len(encoder_mlp_parameters)-1: continue
-            encoder_mlp_activations.append(asnumpy(input_for_layer))
+            encoder_mlp_activations.append(input_for_layer)
         transformer_model_activations['encoder_mlp_previous_activations'] = encoder_mlp_activations
         return input_for_layer
 
@@ -75,7 +75,7 @@ def transformer_model(transformer_parameters):
 
     def encoder_forward(image_embeddings):
         attentions_axons = []
-        mha_activations = [asnumpy(image_embeddings)]
+        mha_activations = [image_embeddings]
         encoder_input = image_embeddings
         for each in range(NUM_LAYERS):
             attention_parameters = encoder_parameters[0][each]
@@ -83,7 +83,7 @@ def transformer_model(transformer_parameters):
             encoder_input, image_projections, attention_axons = encoder_layer(encoder_input, attention_parameters, encoder_mlp_parameters)
             attentions_axons.append(attention_axons)
             if each == NUM_LAYERS-1: continue
-            mha_activations.append(asnumpy(encoder_input))
+            mha_activations.append(encoder_input)
         transformer_model_activations['mha_previous_activations'] = mha_activations
         return encoder_input, image_projections, attentions_axons
 
@@ -91,15 +91,15 @@ def transformer_model(transformer_parameters):
         mlp_activations = [encoder_output]
         layer_input = encoder_output
         for each in range(len(mlp_parameters)):
-            axons, dentrites = cupy.array(mlp_parameters[each][0]), cupy.array(mlp_parameters[each][1])
+            axons, dentrites = mlp_parameters[each][0], mlp_parameters[each][1]
             layer_input = cupy.matmul(layer_input, axons) + dentrites
             if each == len(mlp_parameters)-1: continue
-            mlp_activations.append(asnumpy(layer_input))
+            mlp_activations.append(layer_input)
         transformer_model_activations['mlp_previous_activations'] = mlp_activations
         return layer_input
 
     def model_output(mlp_output):
-        axons, dentrites = cupy.array(output_parameters[0]), cupy.array(output_parameters[1])
+        axons, dentrites = output_parameters[0], output_parameters[1]
         output_prediction = neurons_activations(mlp_output, axons, dentrites)
         transformer_model_activations['model_output_previous_activation'] = mlp_output
         return output_prediction
