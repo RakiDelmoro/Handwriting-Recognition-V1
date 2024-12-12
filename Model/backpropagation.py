@@ -13,7 +13,7 @@ def backpropagation(layer_stress, attention_projections, attentions_axons, trans
 
     def output_layer_propagate_stress(layer_stress):
         transformer_layers_stress['output_layer_stress'] = layer_stress
-        axons = cupy.array(output_parameters[0])
+        axons = output_parameters[0]
         layer_stress = cupy.matmul(layer_stress, axons.transpose())
         return layer_stress
 
@@ -21,9 +21,9 @@ def backpropagation(layer_stress, attention_projections, attentions_axons, trans
         mlp_layers_stress = []
         stress_propagated = layer_stress
         for each in range(len(mlp_parameters)):
-            axons = cupy.array(mlp_parameters[-(each+1)][0])
+            axons = mlp_parameters[-(each+1)][0]
             stress_propagated = cupy.matmul(stress_propagated, axons.transpose())
-            mlp_layers_stress.append(asnumpy(stress_propagated))
+            mlp_layers_stress.append(stress_propagated)
         transformer_layers_stress['mlp_layers_stress'] = mlp_layers_stress
         return stress_propagated
 
@@ -33,7 +33,7 @@ def backpropagation(layer_stress, attention_projections, attentions_axons, trans
         for each in range(len(encoder_mlp_parameters)):
             axons = cupy.array(mlp_parameters[-(each+1)][0])
             stress_propagated = cupy.matmul(stress_propagated, axons.transpose())
-            encoder_mlp_layers_stress.append(asnumpy(stress_propagated))
+            encoder_mlp_layers_stress.append(stress_propagated)
         return stress_propagated, encoder_mlp_layers_stress
 
     def attention_layer_propagate_stress(layer_stress, mha_parameters, attention_axons):
@@ -50,9 +50,9 @@ def backpropagation(layer_stress, attention_projections, attentions_axons, trans
         key_projection_propagated_stress = cupy.matmul(attention_stress_propagate, key_proj).reshape(batch, num_patches, feature_size)
         query_projection_propagated_stress = cupy.matmul(attention_stress_propagate, query_proj).reshape(batch, num_patches, feature_size)
 
-        value_stress = cupy.matmul(value_projection_propagated_stress, cupy.array(value_proj_params[0]).transpose())
-        key_stress = cupy.matmul(key_projection_propagated_stress, cupy.array(key_proj_params[0]).transpose())
-        query_stress = cupy.matmul(query_projection_propagated_stress, cupy.array(query_proj_params[0]).transpose())
+        value_stress = cupy.matmul(value_projection_propagated_stress, value_proj_params[0].transpose())
+        key_stress = cupy.matmul(key_projection_propagated_stress, key_proj_params[0].transpose())
+        query_stress = cupy.matmul(query_projection_propagated_stress, query_proj_params[0].transpose())
         attention_stress = value_stress + key_stress + query_stress
         projections_stress = [value_stress, key_stress, query_stress]
         return attention_stress, projections_stress
