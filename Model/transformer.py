@@ -29,7 +29,7 @@ def transformer_model(transformer_parameters):
         patches_projection = cupy.matmul(batched_patch_image, axons) + dentrites
         patches_activations_with_special_tokens = cupy.concatenate((cls_tokens, patches_projection, dstl_tokens), axis=1)
         patches_activations = patches_activations_with_special_tokens + position_embeddings
-        transformer_model_activations['input_previous_activations'] = [batched_patch_image, cls_tokens, dstl_tokens, position_embeddings]
+        transformer_model_activations['input_previous_activations'] = batched_patch_image
         return patches_activations
 
     def multi_head_attention(image_embeddings, mha_parameters):
