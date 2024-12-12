@@ -11,7 +11,7 @@ def linear_initialization(input_feature, output_feature):
     fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(weights)
     bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
     torch.nn.init.uniform_(bias, -bound, bound)
-    return np.array(weights), np.array(bias)
+    return cupy.array(weights), cupy.array(bias)
 
 def convolution_initialization(input_feature, output_feature):
     weights = torch.empty(input_feature)
@@ -31,9 +31,9 @@ def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_rati
         num_patches = (image_h // patch_h) * (image_w // patch_w)
         patch_feature_size = patch_h * patch_w
         patches_neurons = linear_initialization(patch_feature_size, network_feature_size)
-        classification_token_parameters = np.zeros((BATCH_SIZE, 1, network_feature_size))
-        distillation_token_parameters = np.zeros((BATCH_SIZE, 1, network_feature_size))
-        position_embeddings_parameters = np.zeros((BATCH_SIZE, num_patches+2, network_feature_size))
+        classification_token_parameters = cupy.zeros((BATCH_SIZE, 1, network_feature_size))
+        distillation_token_parameters = cupy.zeros((BATCH_SIZE, 1, network_feature_size))
+        position_embeddings_parameters = cupy.zeros((BATCH_SIZE, num_patches+2, network_feature_size))
         parameters = [patches_neurons, classification_token_parameters, distillation_token_parameters, position_embeddings_parameters]
         transformer_parameters['image_embeddings_parameters'] = parameters
 
@@ -65,7 +65,7 @@ def transformer_parameters_initializer(network_feature_size, mlp_depth, mlp_rati
             mlp_parameters = encoder_mlp_layer_parameters()
             mha_parameters.append(attention_parameters)
             encoder_mlp_parameters.append(mlp_parameters)
-        transformer_parameters['encoder_parameters'] = [mha_parameters, encoder_mlp_parameters]
+        transformer_parameters['encoder_parameters'] = mha_parameters, encoder_mlp_parameters
 
     def mlp_layer_parameters():
         parameters = []
