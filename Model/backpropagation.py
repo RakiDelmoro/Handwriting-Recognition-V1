@@ -5,7 +5,6 @@ from torch.nn.functional import softmax
 from Model.configurations import ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_LAYERS
 
 def backpropagation(layer_stress, attention_projections, attentions_axons, transformer_parameters):
-    image_embeddings_parameters = transformer_parameters['image_embeddings_parameters']
     encoder_parameters = transformer_parameters['encoder_parameters']
     mlp_parameters = transformer_parameters['mlp_parameters']
     output_parameters = transformer_parameters['output_parameters']
