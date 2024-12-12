@@ -13,19 +13,19 @@ from Model.parameters_initalization import transformer_parameters_initializer
 def model_runner(model, training_loader, validation_loader, optimizer, learning_rate, epochs):
     transformer_parameters = transformer_parameters_initializer(NETWORK_FEATURE_SIZE, MLP_DEPTH, MLP_RATIO, 10)
 
-    def training():
+    def training(parameters):
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
-            model_prediction, model_activations, attention_projections, attentions_axons = model(transformer_parameters)(image_array)
+            model_prediction, model_activations, attention_projections, attentions_axons = model(parameters)(image_array)
             stress, layer_stress = cross_entropy_loss(model_prediction, expected_array)
-            model_layers_stresses = backpropagation(layer_stress, attention_projections, attentions_axons, transformer_parameters)
-            update_parameters = update_model_parameters(learning_rate, transformer_parameters, model_activations, model_layers_stresses)
-            transformer_parameters = update_parameters
+            model_layers_stresses = backpropagation(layer_stress, attention_projections, attentions_axons, parameters)
+            parameters = update_model_parameters(learning_rate, parameters, model_activations, model_layers_stresses)
             per_batch_stress.append(stress.item())
+
         return cupy.mean(cupy.array(per_batch_stress))
 
-    def validation():
+    def validation(parameters):
         per_batch_accuracy = []
         wrong_samples_indices = []
         correct_samples_indices = []
@@ -56,7 +56,7 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         return model_accuracy
 
     for each in range(epochs):
-        average_stress = training()
+        average_stress = training(transformer_parameters)
         accuracy = validation()
         print(f'EPOCH: {each+1} LOSS: {average_stress} ACCURACY: {accuracy}')
     
