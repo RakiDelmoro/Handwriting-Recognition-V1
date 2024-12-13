@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 from torch_model.transformer_patches import Transformer
 from torch_based_mnist_utils import model_runner
+from torchsummary import summary
+
 def runner():
     EPOCHS = 50
     BATCH_SIZE = 1024
@@ -22,5 +24,7 @@ def runner():
     validation_dataloader = DataLoader(dataset=validation_dataset, batch_size=BATCH_SIZE, shuffle=True)
     # TRAINING_LOADER = [[torch.randn(BATCH_SIZE, IMAGE_HEIGHT, IMAGE_WIDTH), torch.randint(low=0, high=10, size=(BATCH_SIZE,))]] # Test samples
     model_runner(model, training_dataloader, validation_dataloader, OPTIMIZER, LEARNING_RATE, EPOCHS)
+    # print(summary(model, (28, 28), batch_size=1024))
+    # print(sum(p.numel() for p in model.parameters()))
 
 runner()
