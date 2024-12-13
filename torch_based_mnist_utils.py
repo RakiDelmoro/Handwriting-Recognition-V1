@@ -9,6 +9,8 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
+            image_array = image_array.to(DEVICE)
+            expected_array = expected_array.to(DEVICE)
             model_prediction = model.forward(image_array)
             stress, optim_state = model.get_stress_and_update_parameters(model_prediction, expected_array, optimizer, learning_rate)
             per_batch_stress.append(stress.item())
