@@ -7,19 +7,18 @@ from datasets.utils import ints_to_characters
 from Model.utils import cross_entropy_loss
 from Model.backpropagation import backpropagation
 from Model.update_parameters import update_model_parameters
-from Model.configurations import DEVICE, NETWORK_FEATURE_SIZE, MLP_RATIO, NUMBER_OF_CLASSES, MLP_DEPTH
+from Model.configurations import DEVICE, NETWORK_FEATURE_SIZE, MLP_RATIO, NUMBER_OF_CLASSES, MLP_ARCHITECTURE
 from Model.parameters_initalization import transformer_parameters_initializer
 
 def model_runner(model, training_loader, validation_loader, optimizer, learning_rate, epochs):
-    transformer_parameters = transformer_parameters_initializer(NETWORK_FEATURE_SIZE, MLP_DEPTH, MLP_RATIO, 10)
-
+    transformer_parameters = transformer_parameters_initializer(NETWORK_FEATURE_SIZE,MLP_ARCHITECTURE,10)
     def training(parameters):
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
-            model_prediction, model_activations, attention_projections, attentions_axons = model(parameters)(image_array)
+            model_prediction, model_activations = model(parameters)(image_array)
             stress, layer_stress = cross_entropy_loss(model_prediction, expected_array)
-            model_layers_stresses = backpropagation(layer_stress, attention_projections, attentions_axons, parameters)
+            model_layers_stresses = backpropagation(layer_stress, model_activations, parameters)
             parameters = update_model_parameters(learning_rate, parameters, model_activations, model_layers_stresses)
             per_batch_stress.append(stress.item())
 
