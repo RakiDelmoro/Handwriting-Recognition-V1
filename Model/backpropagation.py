@@ -4,12 +4,14 @@ from torch import tensor
 from torch.nn.functional import softmax
 from Model.configurations import ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS, NUM_LAYERS
 
-def backpropagation(layer_stress, attention_projections, attentions_axons, transformer_parameters):
+def backpropagation(layer_stress, model_activations, transformer_parameters):
+    transformer_layers_stress = {}
+
+    attention_projections = model_activations['attention_projections']
+    attentions_axons = model_activations['attention_axons']
     encoder_parameters = transformer_parameters['encoder_parameters']
     mlp_parameters = transformer_parameters['mlp_parameters']
     output_parameters = transformer_parameters['output_parameters']
-
-    transformer_layers_stress = {}
 
     def output_layer_propagate_stress(layer_stress):
         transformer_layers_stress['output_layer_stress'] = layer_stress
