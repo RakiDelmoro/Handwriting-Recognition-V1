@@ -126,7 +126,8 @@ class Transformer(nn.Module):
     def forward(self, batched_image_array):
         input_embeddings = self.image_embeddings(batched_image_array)
         encoder_output = self.encoder_layers(input_embeddings)
-        model_prediction = self.model_output_prediction(encoder_output)[:, 0, :]
+        mlp_output = self.multi_layer_perceptron(encoder_output)
+        model_prediction = self.model_output_prediction(mlp_output)[:, 0, :]
         return model_prediction
 
     def get_stress_and_update_parameters(self, model_prediction, expected_prediction, optimizer, learning_rate):
