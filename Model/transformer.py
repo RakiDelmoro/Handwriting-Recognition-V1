@@ -31,9 +31,9 @@ def transformer_model(transformer_parameters):
         num_tokens = image_embeddings.shape[1]
         total_attn_feature_size = NUM_ATTENTION_HEADS * ATTENTION_FEATURE_SIZE
 
-        first_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[0][0])) + cupy.array(mha_parameters[1][0])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
-        second_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[0][1])) + cupy.array(mha_parameters[1][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
-        third_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[0][2])) + cupy.array(mha_parameters[1][2])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        first_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[0][0])) + cupy.array(mha_parameters[0][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        second_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[1][0])) + cupy.array(mha_parameters[1][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        third_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[2][0])) + cupy.array(mha_parameters[2][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
         # attention scores -> batch | attention heads | patches | patches
         attention_scores = (cupy.matmul(first_linear_projection, second_linear_projection.transpose(0, 1, 3, 2))) / math.sqrt(ATTENTION_FEATURE_SIZE)
         # attention scores as probabilities
@@ -42,8 +42,8 @@ def transformer_model(transformer_parameters):
         image_patches_context = cupy.matmul(attention_axons, third_linear_projection).reshape(batch_size, num_tokens, NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE)
         # batch | patches | attention heads * attention feature size
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
-        transformer_model_activations['attention_projections'] = [first_linear_projection, second_linear_projection, third_linear_projection]
-        return attention_output, attention_axons 
+        attention_projections = [first_linear_projection, second_linear_projection, third_linear_projection]
+        return attention_output, attention_axons, attention_projections 
 
     def encoder_mlp(attention_output):
         input_for_layer = attention_output
@@ -57,27 +57,30 @@ def transformer_model(transformer_parameters):
 
     def encoder_layer(image_embeddings):
         # Multi-Head-Attention
-        attention_output, attention_axons = multi_head_attention(image_embeddings)
+        attention_output, attention_axons, attention_projections = multi_head_attention(image_embeddings)
         # Residual connection from image embeddings to attention output
         attention_residual_connection = attention_output + image_embeddings
         # Multi-Layer-Perceptron
         mlp_output, mlp_activations = encoder_mlp(attention_residual_connection)
         # Residual connection from attention residual connection to mlp output
         mlp_residual_connection = mlp_output + attention_residual_connection
-        return mlp_residual_connection, attention_axons, image_embeddings, mlp_activations
+        return mlp_residual_connection, attention_axons, attention_projections, image_embeddings, mlp_activations
 
     def encoder_forward(image_embeddings):
         encoder_layers_embeddings = []
         encoder_layers_attention_axons = []
         encoder_layers_mlp_activations = []
+        encoder_layers_attention_projections = []
         encoder_input = image_embeddings
         for _ in range(NUM_LAYERS):
-            encoder_input, attention_axons, embeddings, mlp_activations = encoder_layer(encoder_input)
+            encoder_input, attention_axons, attention_projections, embeddings, mlp_activations = encoder_layer(encoder_input)
             encoder_layers_embeddings.append(embeddings)
             encoder_layers_attention_axons.append(attention_axons)
+            encoder_layers_attention_projections.append(attention_projections)
             encoder_layers_mlp_activations.append(mlp_activations)
-        # Store encoder activations
+
         transformer_model_activations['encoder_input_embeddings'] = encoder_layers_embeddings
+        transformer_model_activations['attention_projections'] = encoder_layers_attention_projections
         transformer_model_activations['attention_axons'] = encoder_layers_attention_axons
         transformer_model_activations['encoder_mlp_activations'] = encoder_layers_mlp_activations
         return encoder_input 
