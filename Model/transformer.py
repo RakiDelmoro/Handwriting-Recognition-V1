@@ -4,8 +4,7 @@ import math
 import numpy as np
 from einops import rearrange
 from cupy import asnumpy
-from Model.utils import softmax
-from neural_network_layers import neurons_activations
+from Model.utils import softmax, relu
 from Model.configurations import NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE, NUM_LAYERS, PATCH_SIZE, BATCH_SIZE, NUM_PATCHES, NETWORK_FEATURE_SIZE, MLP_ARCHITECTURE
 
 def transformer_model(transformer_parameters):
@@ -50,8 +49,10 @@ def transformer_model(transformer_parameters):
         encoder_mlp_parameters = transformer_parameters['encoder_mlp_parameters']
         encoder_mlp_activations = [attention_output]
         for each in range(len(MLP_ARCHITECTURE)-1):
+            use_activation_function = each == 0
             axons, dentrites = encoder_mlp_parameters[each]
-            input_for_layer = cupy.matmul(input_for_layer, cupy.array(axons)) + cupy.array(dentrites)
+            if use_activation_function: input_for_layer = relu(cupy.matmul(input_for_layer, cupy.array(axons)) + cupy.array(dentrites))
+            else: input_for_layer = cupy.matmul(input_for_layer, cupy.array(axons)) + cupy.array(dentrites)
             encoder_mlp_activations.append(input_for_layer)
         return input_for_layer, encoder_mlp_activations
 
@@ -90,10 +91,12 @@ def transformer_model(transformer_parameters):
         mlp_activations = [encoder_output]
         layer_input = encoder_output
         for each in range(len(MLP_ARCHITECTURE)-1):
-            axons, dentrites = cupy.asarray(mlp_parameters[each][0]), cupy.asarray(mlp_parameters[each][1])
-            layer_input = cupy.matmul(layer_input, axons) + dentrites
+            use_activation_function = each == 0
+            axons, dentrites = mlp_parameters[each]
+            if use_activation_function: layer_input = relu(cupy.matmul(layer_input, cupy.array(axons)) + cupy.array(dentrites))
+            else: layer_input = cupy.matmul(layer_input, cupy.array(axons)) + cupy.array(dentrites)
             mlp_activations.append(layer_input)
-        transformer_model_activations['mlp_previous_activations'] = mlp_activations
+        transformer_model_activations['mlp_activations'] = mlp_activations
         return layer_input
 
     def model_output(mlp_output):
