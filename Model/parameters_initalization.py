@@ -22,9 +22,9 @@ def transformer_parameters_initializer(network_feature_size: int, mlp_architectu
         num_patches = (image_h // patch_h) * (image_w // patch_w)
         patch_feature_size = patch_h * patch_w
         patches_neurons = linear_initialization(patch_feature_size, network_feature_size)
-        classification_token_parameters = np.empty((1, 1, network_feature_size), dtype=np.float32)
-        distillation_token_parameters = np.empty((1, 1, network_feature_size), np.float32)
-        position_embeddings_parameters = np.empty((1, num_patches+2, network_feature_size), np.float32)
+        classification_token_parameters = np.zeros((1, 1, network_feature_size), dtype=np.float32)
+        distillation_token_parameters = np.zeros((1, 1, network_feature_size), np.float32)
+        position_embeddings_parameters = np.zeros((1, num_patches+2, network_feature_size), np.float32)
         parameters = [patches_neurons, classification_token_parameters, distillation_token_parameters, position_embeddings_parameters]
         transformer_parameters['image_embeddings_parameters'] = parameters
 
