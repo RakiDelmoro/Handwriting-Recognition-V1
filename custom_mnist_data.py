@@ -12,19 +12,19 @@ from Model.parameters_initalization import transformer_parameters_initializer
 
 def model_runner(model, training_loader, validation_loader, optimizer, learning_rate, epochs):
     transformer_parameters = transformer_parameters_initializer(NETWORK_FEATURE_SIZE,MLP_ARCHITECTURE,10)
-    def training(parameters):
+    def training():
         per_batch_stress = []
         training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
         for image_array, expected_array in training_loop:
-            model_prediction, model_activations = model(parameters)(image_array)
+            model_prediction, model_activations = model(transformer_parameters)(image_array)
             stress, layer_stress = cross_entropy_loss(model_prediction, expected_array)
-            model_layers_stresses = backpropagation(layer_stress, model_activations, parameters)
-            parameters = update_model_parameters(learning_rate, parameters, model_activations, model_layers_stresses)
+            model_layers_stresses = backpropagation(layer_stress, model_activations, transformer_parameters)
+            update_model_parameters(learning_rate, transformer_parameters, model_activations, model_layers_stresses)
             per_batch_stress.append(stress.item())
 
         return cupy.mean(cupy.array(per_batch_stress))
 
-    def validation(parameters):
+    def validation():
         per_batch_accuracy = []
         wrong_samples_indices = []
         correct_samples_indices = []
@@ -33,7 +33,7 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         for input_image_batch, expected_batch in validation_loader:
             input_image_batch = input_image_batch.to(DEVICE)
             expected_batch = expected_batch.to(DEVICE)
-            model_output = model.forward(input_image_batch)
+            model_output, _ = model(transformer_parameters)(input_image_batch)
             batch_accuracy = (expected_batch == (model_output).argmax(-1)).float().mean()
             correct_indices_in_a_batch = torch.where(expected_batch == model_output.argmax(-1))[0]
             wrong_indices_in_a_batch = torch.where(~(expected_batch == model_output.argmax(-1)))[0]
@@ -55,7 +55,7 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         return model_accuracy
 
     for each in range(epochs):
-        average_stress = training(transformer_parameters)
+        average_stress = training()
         accuracy = validation()
         print(f'EPOCH: {each+1} LOSS: {average_stress} ACCURACY: {accuracy}')
     
