@@ -5,7 +5,7 @@ import torch.nn as nn
 from einops.layers.torch import Rearrange
 from Model.utils import unpadded_length_tokens
 from datasets.utils import ints_to_characters, char_to_index, PAD_TOKEN
-from Model.configurations import NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS,  MLP_FEATURE_SIZE, NUM_LAYERS, MAX_PATCHES_LENGTH, IMAGE_SIZE, PATCH_SIZE, DEVICE
+from Model.configurations import NETWORK_FEATURE_SIZE, ATTENTION_FEATURE_SIZE, NUM_ATTENTION_HEADS,  MLP_FEATURE_SIZE, NUM_LAYERS, IMAGE_SIZE, PATCH_SIZE, DEVICE
     
 class ImageEmbeddings(nn.Module):
     def __init__(self):
@@ -14,9 +14,7 @@ class ImageEmbeddings(nn.Module):
         patch_h, patch_w = PATCH_SIZE
         num_patches = (image_h // patch_h) * (image_w // patch_w)
         patch_feature_size = patch_h * patch_w
-        self.to_patches_neurons = nn.Sequential(
-            Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w),
-            nn.Linear(patch_feature_size, NETWORK_FEATURE_SIZE, device=DEVICE))
+        self.to_patches_neurons = nn.Sequential(Rearrange('b (h p1) (w p2) -> b (h w) (p1 p2)', p1=patch_h, p2=patch_w), nn.Linear(patch_feature_size, NETWORK_FEATURE_SIZE, device=DEVICE))
         self.classification_token = nn.Parameter(torch.zeros(1, 1, NETWORK_FEATURE_SIZE, device=DEVICE))
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, NETWORK_FEATURE_SIZE, device=DEVICE))
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, NETWORK_FEATURE_SIZE, device=DEVICE))
@@ -68,8 +66,8 @@ class EncoderMultiLayerPerceptron(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
-        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
         self.activation_function = nn.ReLU()
+        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
 
     def forward(self, attention_output: torch.Tensor):
         layer_1_output = self.linear_layer_1(attention_output)
@@ -106,8 +104,8 @@ class MultiLayerPerceptron(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_layer_1 = nn.Linear(NETWORK_FEATURE_SIZE, MLP_FEATURE_SIZE, device=DEVICE)
-        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
         self.activation_function = nn.ReLU()
+        self.linear_layer_2 = nn.Linear(MLP_FEATURE_SIZE, NETWORK_FEATURE_SIZE, device=DEVICE)
 
     def forward(self, encoder_output: torch.Tensor):
         layer_1_output = self.linear_layer_1(encoder_output)
