@@ -1,14 +1,14 @@
 import cupy
 import torch
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from features import GREEN, RED, RESET
 from Model.configurations import DEVICE
 
 def model_runner(model, training_loader, validation_loader, optimizer, learning_rate, epochs):
     def training():
         per_batch_stress = []
-        training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
-        for image_array, expected_array in training_loop:
+        # training_loop = tqdm(training_loader, total=len(training_loader), leave=False)
+        for image_array, expected_array in training_loader:
             image_array = image_array.to(DEVICE)
             expected_array = expected_array.to(DEVICE)
             model_prediction = model.forward(image_array)
@@ -61,9 +61,9 @@ def model_runner(model, training_loader, validation_loader, optimizer, learning_
         loss = checkpoint['loss']
         print(f'Model path: model.pt epoch: {epoch} loss: {loss}')
 
-    for each in range(epochs):
+    for each in (t := trange(epochs)):
         average_stress, optim_state = training()
         accuracy = validation()
-        # save_model_weights(each+1, average_stress, optim_state)
-        print(f'EPOCH: {each+1} LOSS: {average_stress} ACCURACY: {accuracy}')
+        t.set_description(f'Loss: {average_stress:.2f} Accuracy: {accuracy:.2f}')
+        # print(f'EPOCH: {each+1} LOSS: {average_stress} ACCURACY: {accuracy}')
     
