@@ -12,16 +12,18 @@ def transformer_model(transformer_parameters):
 
     def image_embeddings(batched_image):
         image_embeddings_parameters = transformer_parameters['image_embeddings_parameters']
-        axons, dentrites = cupy.asarray(image_embeddings_parameters[0][0]), cupy.asarray(image_embeddings_parameters[0][1])
-        cls_tokens = cupy.resize(image_embeddings_parameters[1], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
-        dstl_tokens = cupy.resize(image_embeddings_parameters[2], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
+        learnable_tokens = transformer_parameters['learnable_tokens']
+
+        axons, dentrites = image_embeddings_parameters[0], image_embeddings_parameters[1]
+        cls_tokens = cupy.resize(learnable_tokens[0][:, 0, :], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
+        dstl_tokens =cupy.resize(learnable_tokens[1][:, 0, :], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
         # Position embeddings have a +2 for num patches since we have a 2 special tokens (classification token & distillation token)
-        position_embeddings = cupy.resize(image_embeddings_parameters[3], new_shape=(BATCH_SIZE, NUM_PATCHES+2, NETWORK_FEATURE_SIZE))
+        position_embeddings = cupy.resize(learnable_tokens[2], new_shape=(BATCH_SIZE, NUM_PATCHES+2, NETWORK_FEATURE_SIZE))
         batched_patch_image = cupy.array(rearrange(batched_image, 'b (h p1) (w p2) -> b (h w) (p1 p2)', p1=PATCH_SIZE[0], p2=PATCH_SIZE[1]))
-        patches_projection = cupy.matmul(batched_patch_image, axons) + dentrites
+        patches_projection = cupy.matmul(batched_patch_image, axons) + dentrites[0, :]
         patches_activations_with_special_tokens = cupy.concatenate((cls_tokens, patches_projection, dstl_tokens), axis=1)
         patches_activations = patches_activations_with_special_tokens + position_embeddings
-        transformer_model_activations['input_previous_activations'] = asnumpy(batched_patch_image)
+        transformer_model_activations['input_previous_activations'] = batched_patch_image
         return patches_activations
 
     def multi_head_attention(image_embeddings):
