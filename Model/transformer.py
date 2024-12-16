@@ -14,27 +14,28 @@ def transformer_model(transformer_parameters):
         image_embeddings_parameters = transformer_parameters['image_embeddings_parameters']
         learnable_tokens = transformer_parameters['learnable_tokens']
 
-        axons, dentrites = image_embeddings_parameters[0], image_embeddings_parameters[1]
+        axons, dentrites = cupy.array(image_embeddings_parameters[0]), cupy.array(image_embeddings_parameters[1])
         cls_tokens = cupy.resize(learnable_tokens[0][:, 0, :], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
-        dstl_tokens =cupy.resize(learnable_tokens[1][:, 0, :], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
+        dstl_tokens = cupy.resize(learnable_tokens[1][:, 0, :], new_shape=(BATCH_SIZE, 1, NETWORK_FEATURE_SIZE))
         # Position embeddings have a +2 for num patches since we have a 2 special tokens (classification token & distillation token)
         position_embeddings = cupy.resize(learnable_tokens[2], new_shape=(BATCH_SIZE, NUM_PATCHES+2, NETWORK_FEATURE_SIZE))
         batched_patch_image = cupy.array(rearrange(batched_image, 'b (h p1) (w p2) -> b (h w) (p1 p2)', p1=PATCH_SIZE[0], p2=PATCH_SIZE[1]))
         patches_projection = cupy.matmul(batched_patch_image, axons) + dentrites[0, :]
         patches_activations_with_special_tokens = cupy.concatenate((cls_tokens, patches_projection, dstl_tokens), axis=1)
         patches_activations = patches_activations_with_special_tokens + position_embeddings
-        transformer_model_activations['input_previous_activations'] = batched_patch_image
+        transformer_model_activations['input_previous_activations'] = asnumpy(batched_patch_image)
         return patches_activations
 
     def multi_head_attention(image_embeddings):
-        mha_parameters = transformer_parameters['attention_parameters']
+        attention_parameters = transformer_parameters['attention_parameters']
+        axons, dentrites = cupy.array(attention_parameters[0]), cupy.array(attention_parameters[1])
         batch_size = image_embeddings.shape[0]
         num_tokens = image_embeddings.shape[1]
         total_attn_feature_size = NUM_ATTENTION_HEADS * ATTENTION_FEATURE_SIZE
 
-        first_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[0][0])) + cupy.array(mha_parameters[0][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
-        second_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[1][0])) + cupy.array(mha_parameters[1][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
-        third_linear_projection = (cupy.matmul(image_embeddings, cupy.array(mha_parameters[2][0])) + cupy.array(mha_parameters[2][1])).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        first_linear_projection = (cupy.matmul(image_embeddings, axons[0]) + dentrites[0][0, :]).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        second_linear_projection = (cupy.matmul(image_embeddings, axons[1]) + dentrites[1][0, :]).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
+        third_linear_projection = (cupy.matmul(image_embeddings, axons[2]) + dentrites[2][0, :]).reshape(batch_size, NUM_ATTENTION_HEADS, num_tokens, ATTENTION_FEATURE_SIZE)
         # attention scores -> batch | attention heads | patches | patches
         attention_scores = (cupy.matmul(first_linear_projection, second_linear_projection.transpose(0, 1, 3, 2))) / math.sqrt(ATTENTION_FEATURE_SIZE)
         # attention scores as probabilities
@@ -43,18 +44,20 @@ def transformer_model(transformer_parameters):
         image_patches_context = cupy.matmul(attention_axons, third_linear_projection).reshape(batch_size, num_tokens, NUM_ATTENTION_HEADS, ATTENTION_FEATURE_SIZE)
         # batch | patches | attention heads * attention feature size
         attention_output = image_patches_context.reshape(batch_size, num_tokens, total_attn_feature_size)
-        attention_projections = [first_linear_projection, second_linear_projection, third_linear_projection]
+        attention_projections = np.stack([first_linear_projection, second_linear_projection, third_linear_projection], axis=0)
         return attention_output, attention_axons, attention_projections 
 
     def encoder_mlp(attention_output):
         input_for_layer = attention_output
         encoder_mlp_parameters = transformer_parameters['encoder_mlp_parameters']
+        axons, dentrites = cupy.array(encoder_mlp_parameters[0]), cupy.array(encoder_mlp_parameters[1])
         encoder_mlp_activations = [attention_output]
         for each in range(len(MLP_ARCHITECTURE)-1):
+            input_size = MLP_ARCHITECTURE[each]
+            output_size = MLP_ARCHITECTURE[each+1]
             use_activation_function = each == 0
-            axons, dentrites = encoder_mlp_parameters[each]
-            if use_activation_function: input_for_layer = relu(cupy.matmul(input_for_layer, cupy.array(axons)) + cupy.array(dentrites))
-            else: input_for_layer = cupy.matmul(input_for_layer, cupy.array(axons)) + cupy.array(dentrites)
+            if use_activation_function: input_for_layer = relu(cupy.matmul(input_for_layer, axons[each, :input_size, :output_size]) + dentrites[each, 0, :output_size])
+            else: input_for_layer = cupy.matmul(input_for_layer, axons[each, :input_size, :output_size]) + dentrites[each, 0, :output_size] 
             encoder_mlp_activations.append(input_for_layer)
         return input_for_layer, encoder_mlp_activations
 
