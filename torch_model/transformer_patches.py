@@ -91,13 +91,11 @@ class Layer(nn.Module):
 class EncoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer = Layer()
-        self.encoder_layers = nn.ModuleList([self.layer for _ in range(NUM_LAYERS)])
+        self.encoder_layers = nn.ModuleList([Layer() for _ in range(NUM_LAYERS)])
 
     def forward(self, input_embeddings: torch.Tensor):
         layer_output = input_embeddings
-        for layer in self.encoder_layers:
-            layer_output = layer(layer_output)
+        for layer in self.encoder_layers: layer_output = layer(layer_output)
         return layer_output
 
 class MultiLayerPerceptron(nn.Module):
@@ -118,13 +116,13 @@ class Transformer(nn.Module):
         super().__init__()
         self.image_embeddings = ImageEmbeddings()
         self.encoder_layers = EncoderLayer()
-        self.multi_layer_perceptron = MultiLayerPerceptron()
+        self.mlp = MultiLayerPerceptron()
         self.model_output_prediction = nn.Linear(NETWORK_FEATURE_SIZE, 10, device=DEVICE)
 
     def forward(self, batched_image_array):
         input_embeddings = self.image_embeddings(batched_image_array)
         encoder_output = self.encoder_layers(input_embeddings)
-        mlp_output = self.multi_layer_perceptron(encoder_output)
+        mlp_output = self.mlp(encoder_output)
         model_prediction = self.model_output_prediction(mlp_output)[:, 0, :]
         return model_prediction
 
