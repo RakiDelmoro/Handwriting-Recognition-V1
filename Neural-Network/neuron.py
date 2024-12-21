@@ -1,5 +1,6 @@
 import cupy as c
 import numpy as n
+from cupy import cuda
 
 class Neuron:
     """Neuron class for storing a scalar value and stress"""
@@ -21,7 +22,7 @@ class Neuron:
         out.backpropagation = backpropagation
         return out
 
-    def __add__(self, other_value):
+    def __mul__(self, other_value):
         other_value = other_value if isinstance(other_value, Neuron) else Neuron(other_value)
         out = Neuron(self.value * other_value.value, (self, other_value), '*', self.device)
         def backpropagation():
@@ -32,6 +33,8 @@ class Neuron:
 
     def __repr__(self):
         return f'Neuron(value={self.value})'
+    
+    # TODO: Include the operation of numpy matmul
     
 
 # def Neuron(value, axons_and_dentrites=(), operation=''):
