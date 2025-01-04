@@ -93,13 +93,15 @@ def transformer_model(transformer_parameters):
 
     def multi_layer_perceptron(encoder_output):
         mlp_parameters = transformer_parameters['mlp_parameters']
+        axons, dentrites = cupy.array(mlp_parameters[0]), cupy.array(mlp_parameters[1])
         mlp_activations = [encoder_output]
         layer_input = encoder_output
         for each in range(len(MLP_ARCHITECTURE)-1):
             use_activation_function = each == 0
-            axons, dentrites = mlp_parameters[each]
-            if use_activation_function: layer_input = relu(cupy.matmul(layer_input, cupy.array(axons)) + cupy.array(dentrites))
-            else: layer_input = cupy.matmul(layer_input, cupy.array(axons)) + cupy.array(dentrites)
+            input_size = MLP_ARCHITECTURE[each]
+            output_size = MLP_ARCHITECTURE[each+1]
+            if use_activation_function: layer_input = relu(cupy.matmul(layer_input, axons[each, :input_size, :output_size]) + dentrites[each, 0, :output_size])
+            else: layer_input = cupy.matmul(layer_input, axons[each, :input_size, :output_size]) + dentrites[each, 0, :output_size]
             mlp_activations.append(layer_input)
         transformer_model_activations['mlp_activations'] = mlp_activations
         return layer_input
@@ -107,7 +109,7 @@ def transformer_model(transformer_parameters):
     def model_output(mlp_output):
         output_parameters = transformer_parameters['output_parameters']
         axons, dentrites = cupy.array(output_parameters[0]), cupy.array(output_parameters[1])
-        output_prediction = cupy.matmul(mlp_output, axons) + dentrites
+        output_prediction = cupy.matmul(mlp_output, axons) + dentrites[0, :]
         transformer_model_activations['model_output_previous_activation'] = mlp_output
         return output_prediction
 
